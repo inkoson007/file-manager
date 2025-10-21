@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KOFFEE DEVELOPER - Файловый менеджер</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --header-height: 40px;
+            --primary-color: #646cff;
+            --header-bg: rgba(30, 30, 46, 0.7);
+            --main-bg: rgba(40, 42, 54, 0.9);
+            --text-color: #f8f8f2;
+            --border-color: #44475a;
+            --mac-btn-close: #ff5f56;
+            --mac-btn-min: #ffbd2e;
+            --mac-btn-max: #27c93f;
+            --error-color: #ff6b6b;
+            --success-color: #50fa7b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #282a36, #1e1e2e);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* MacOS Window */
+        .mac-window {
+            width: 90%;
+            max-width: 900px;
+            height: 80vh;
+            min-height: 600px;
+            background: var(--main-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Title Bar */
+        .mac-title-bar {
+            height: var(--header-height);
+            background: var(--header-bg);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            -webkit-user-select: none;
+            user-select: none;
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+        }
+
+        .mac-buttons {
+            display: flex;
+            gap: 8px;
+            margin-right: 15px;
+        }
+
+        .mac-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .mac-btn-close { background-color: var(--mac-btn-close); }
+        .mac-btn-min { background-color: var(--mac-btn-min); }
+        .mac-btn-max { background-color: var(--mac-btn-max); }
+
+        .mac-title {
+            flex: 1;
+            text-align: center;
+            font-size: 13px;
+            color: #a9a9a9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 0 10px;
+        }
+
+        /* Content Area */
+        .mac-content {
+            flex: 1;
+            overflow: auto;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* App Icon */
+        .app-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 25px;
+            background: linear-gradient(135deg, #646cff, #af71ff);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 25px rgba(100, 108, 255, 0.3);
+        }
+
+        .app-icon i {
+            font-size: 60px;
+            color: white;
+        }
+
+        /* App Info */
+        .app-title {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 5px;
+            background: linear-gradient(to right, #646cff, #af71ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 600;
+        }
+
+        .app-version {
+            text-align: center;
+            color: #a9a9a9;
+            margin-bottom: 30px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .app-version:hover {
+            color: var(--primary-color);
+        }
+
+        .app-description {
+            text-align: center;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            font-size: 1.1rem;
+            max-width: 600px;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .feature-card {
+            background: rgba(30, 30, 46, 0.5);
+            border-radius: 10px;
+            padding: 25px 20px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            background: rgba(30, 30, 46, 0.7);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 28px;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+
+        .feature-title {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .feature-text {
+            font-size: 0.95rem;
+            color: #a9a9a9;
+            line-height: 1.5;
+        }
+
+        /* Access Alert */
+        .access-alert {
+            background: rgba(255, 71, 71, 0.1);
+            border-left: 3px solid #ff4747;
+            padding: 15px;
+            border-radius: 0 6px 6px 0;
+            margin: 30px 0;
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        /* Footer */
+        .developer-footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #a9a9a9;
+            font-size: 0.9rem;
+        }
+
+        .developer-name {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        /* Version Info */
+        .version-info {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        /* Login Button */
+        .login-btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #646cff, #af71ff);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(100, 108, 255, 0.3);
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(100, 108, 255, 0.4);
+        }
+
+        /* Loader */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #282a36, #1e1e2e);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .loader-overlay.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-title {
+            color: var(--text-color);
+            font-size: 2rem;
+            margin-bottom: 30px;
+            text-align: center;
+            animation: fadeIn 1.5s ease-out;
+        }
+
+        .loader-spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(100, 108, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        .loader-version {
+            position: relative;
+            bottom: auto;
+            right: auto;
+            margin-top: 30px;
+            color: #a9a9a9;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--main-bg);
+            border-radius: 12px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #a9a9a9;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: var(--text-color);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #a9a9a9;
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(30, 30, 46, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-color);
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #646cff, #af71ff);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(100, 108, 255, 0.4);
+        }
+
+        .error-message {
+            color: var(--error-color);
+            font-size: 0.9rem;
+            margin-top: 5px;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .mac-window {
+                width: 95%;
+                height: 90vh;
+                min-height: auto;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .app-title {
+                font-size: 2rem;
+            }
+            
+            .app-icon {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .app-icon i {
+                font-size: 50px;
+            }
+            
+            .modal-content {
+                padding: 20px;
+            }
+        }
+        /* Добавляем новые стили для скроллбаров */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--sidebar-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader-overlay">
+        <div class="loader-title">KOFFEE DEVELOPER 1.5.0</div>
+        <div class="loader-spinner"></div>
+        <div class="loader-version">Инициализация системы...</div>
+    </div>
+
+    <div class="mac-window" style="display: none;">
+        <div class="mac-title-bar">
+            <div class="mac-buttons">
+                <div class="mac-btn mac-btn-close"></div>
+                <div class="mac-btn mac-btn-min"></div>
+                <div class="mac-btn mac-btn-max"></div>
+            </div>
+            <div class="mac-title">KOFFEE DEVELOPER — Файловый менеджер</div>
+        </div>
+        
+        <div class="mac-content">
+            <div class="app-icon">
+                <i class="fas fa-coffee"></i>
+            </div>
+            <h1 class="app-title">KOFFEE DEVELOPER</h1>
+            <div class="app-version">Версия 1.5.0</div>
+            <p class="app-description">
+                Профессиональный файловый менеджер с расширенными возможностями<br>
+                для разработчиков и технических специалистов
+            </p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-code"></i></div>
+                    <h3 class="feature-title">Редактор кода</h3>
+                    <p class="feature-text">Встроенный редактор с подсветкой синтаксиса для всех популярных языков программирования</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+                    <h3 class="feature-title">Безопасность</h3>
+                    <p class="feature-text">Расширенные права доступа и шифрование данных для защиты ваших файлов</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-server"></i></div>
+                    <h3 class="feature-title">Удалённый доступ</h3>
+                    <p class="feature-text">Подключение к серверам по SSH/SFTP для управления удалёнными файлами</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                    <h3 class="feature-title">Производительность</h3>
+                    <p class="feature-text">Оптимизированное ядро для работы с большими проектами и файлами</p>
+                </div>
+            </div>
+            
+            <div class="access-alert">
+                <i class="fas fa-lock"></i> Доступ к системе ограничен и предоставляется только авторизованным пользователям
+            </div>
+            
+            <button class="login-btn" id="loginBtn">
+                <i class="fas fa-sign-in-alt"></i> Перейти в файловый менеджер
+            </button>
+            
+            <div class="developer-footer">
+                Разработано <span class="developer-name">INK</span> | Все права защищены 
+            </div>
+        </div>
+        
+        <div class="version-info">v1.5.0</div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Авторизация</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Логин</label>
+                    <input type="text" id="username" class="form-control" placeholder="Введите логин">
+                    <div class="error-message" id="usernameError"></div>
+                </div>
+                <div class="form-group">
+                    <label for="password">Пароль</label>
+                    <input type="password" id="password" class="form-control" placeholder="Введите пароль">
+                    <div class="error-message" id="passwordError"></div>
+                </div>
+                <button type="submit" class="btn">
+                    <i class="fas fa-sign-in-alt"></i> Войти
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Анимация загрузки
+        window.addEventListener('load', function() {
+            const loader = document.querySelector('.loader-overlay');
+            const mainContent = document.querySelector('.mac-window');
+            
+            setTimeout(() => {
+                loader.classList.add('fade-out');
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                    mainContent.style.display = 'flex';
+                }, 500);
+            }, 2000);
+        });
+
+        // Эффекты кнопок окна macOS
+        const macBtnClose = document.querySelector('.mac-btn-close');
+        const macBtnMin = document.querySelector('.mac-btn-min');
+        const macBtnMax = document.querySelector('.mac-btn-max');
+        
+        macBtnClose.addEventListener('click', () => {
+            document.querySelector('.mac-window').style.transform = 'scale(0.9)';
+            setTimeout(() => {
+                document.querySelector('.mac-window').style.display = 'none';
+            }, 300);
+        });
+        
+        macBtnMin.addEventListener('click', () => {
+            document.querySelector('.mac-window').style.transform = 'translateY(100vh)';
+            setTimeout(() => {
+                document.querySelector('.mac-window').style.display = 'none';
+            }, 300);
+        });
+        
+        macBtnMax.addEventListener('click', () => {
+            const window = document.querySelector('.mac-window');
+            if (window.style.width === '100%') {
+                window.style.width = '90%';
+                window.style.height = '80vh';
+                window.style.maxWidth = '900px';
+            } else {
+                window.style.width = '100%';
+                window.style.height = '100vh';
+                window.style.maxWidth = 'none';
+            }
+        });
+
+        // Модальное окно входа
+        const loginBtn = document.getElementById('loginBtn');
+        const loginModal = document.getElementById('loginModal');
+        const modalClose = document.getElementById('modalClose');
+        const loginForm = document.getElementById('loginForm');
+        
+        loginBtn.addEventListener('click', () => {
+            loginModal.style.display = 'flex';
+        });
+        
+        modalClose.addEventListener('click', () => {
+            loginModal.style.display = 'none';
+        });
+        
+        // Закрытие модального окна при клике вне его
+        loginModal.addEventListener('click', (e) => {
+            if (e.target === loginModal) {
+                loginModal.style.display = 'none';
+            }
+        });
+        
+        // Обработка формы входа
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const usernameError = document.getElementById('usernameError');
+            const passwordError = document.getElementById('passwordError');
+            
+            // Сброс сообщений об ошибках
+            usernameError.style.display = 'none';
+            passwordError.style.display = 'none';
+            
+            // Проверка учетных данных
+            if (username !== 'INK') {
+                usernameError.textContent = 'Неверный логин';
+                usernameError.style.display = 'block';
+                return;
+            }
+            
+            if (password !== 'INK') {
+                passwordError.textContent = 'Неверный пароль';
+                passwordError.style.display = 'block';
+                return;
+            }
+            
+            // Успешный вход - перенаправление
+            window.location.href = '/file-manager.php';
+        });
+
+        // Информация о версии
+        const versionInfo = document.querySelector('.version-info');
+        const appVersion = document.querySelector('.app-version');
+        
+        versionInfo.addEventListener('click', () => {
+            // Создаем маленькое окно с информацией
+            const infoWindow = document.createElement('div');
+            infoWindow.style.position = 'fixed';
+            infoWindow.style.top = '50%';
+            infoWindow.style.left = '50%';
+            infoWindow.style.transform = 'translate(-50%, -50%)';
+            infoWindow.style.width = '300px';
+            infoWindow.style.backgroundColor = 'var(--main-bg)';
+            infoWindow.style.borderRadius = '12px';
+            infoWindow.style.padding = '20px';
+            infoWindow.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.3)';
+            infoWindow.style.border = '1px solid var(--border-color)';
+            infoWindow.style.zIndex = '1001';
+            
+            infoWindow.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <h3 style="margin: 0; font-size: 1.2rem;">Информация о версии</h3>
+                    <button id="closeInfo" style="background: none; border: none; color: #a9a9a9; font-size: 1.2rem; cursor: pointer;">&times;</button>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <p><strong>KOFFEE DEVELOPER</strong> v1.5.0</p>
+                    <p>Разработано: <strong>INK</strong></p>
+                </div>
+                <button id="openLogin" style="
+                    display: block;
+                    width: 100%;
+                    padding: 10px;
+                    background: linear-gradient(135deg, #646cff, #af71ff);
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                ">
+                    <i class="fas fa-sign-in-alt"></i> Перейти к авторизации
+                </button>
+            `;
+            
+            document.body.appendChild(infoWindow);
+            
+            // Обработчики для нового окна
+            document.getElementById('closeInfo').addEventListener('click', () => {
+                document.body.removeChild(infoWindow);
+            });
+            
+            document.getElementById('openLogin').addEventListener('click', () => {
+                document.body.removeChild(infoWindow);
+                loginModal.style.display = 'flex';
+            });
+        });
+        
+        appVersion.addEventListener('click', () => {
+            versionInfo.click();
+        });
+    </script>
+</body>
+</html>
