@@ -1,18 +1,139 @@
 <?php
-// config.php - Настройки безопасности
-define('BASE_DIR', __DIR__); // Корневая директория для просмотра
-define('ALLOWED_EXTENSIONS', ['php', 'html', 'css', 'js', 'json', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'mp3', 'wav', 'ogg']);
-define('MAX_FILE_SIZE', 5 * 1024 * 1024); // 5MB максимальный размер файла для просмотра
-define('MAX_UPLOAD_SIZE', 10 * 1024 * 1024); // 10MB максимальный размер загружаемого файла
-define('VERSION', '1.5.0'); // Версия файлового менеджера
+session_start();
 
-// Проверяем авторизацию
-$isLoggedIn = true; // Замените на реальную проверку авторизации
+// ╔══════════════════════════════════════════════════════════════╗
+// ║               KOFFEE DEVELOPER — НАСТРОЙКИ                  ║
+// ╠══════════════════════════════════════════════════════════════╣
+// ║  Авторизация                                                 ║
+define('AUTH_ENABLED',  false);             // ← false = отключить авторизацию
+define('AUTH_LOGIN',    'Логин');           // ← логин
+define('AUTH_PASSWORD', 'Пароль');         // ← пароль
+// ╠══════════════════════════════════════════════════════════════╣
+// ║  Корневая директория (по умолчанию — папка файла)            ║
+define('BASE_DIR', __DIR__);
+// ╠══════════════════════════════════════════════════════════════╣
+// ║  Разрешённые расширения для просмотра/редактирования         ║
+define('ALLOWED_EXTENSIONS', array(
+    // Web
+    'php', 'html', 'htm', 'css', 'js', 'json', 'xml', 'svg',
+    // Скрипты / программирование
+    'lua', 'py', 'rb', 'sh', 'bash', 'bat', 'cmd', 'ps1',
+    'c', 'cpp', 'h', 'hpp', 'cs', 'java', 'kt', 'go', 'rs',
+    'ts', 'tsx', 'jsx', 'vue', 'sql', 'r', 'pl', 'swift',
+    // Конфиги / данные
+    'txt', 'md', 'log', 'ini', 'cfg', 'conf', 'env', 'yaml', 'yml', 'toml',
+    // Медиа
+    'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'svg',
+    'mp3', 'wav', 'ogg', 'flac', 'aac',
+));
+// ╠══════════════════════════════════════════════════════════════╣
+// ║  Макс. размер файла для просмотра / загрузки                 ║
+define('MAX_FILE_SIZE',    5  * 1024 * 1024); // 5 MB
+define('MAX_UPLOAD_SIZE',  10 * 1024 * 1024); // 10 MB
+// ╠══════════════════════════════════════════════════════════════╣
+// ║  Версия                                                      ║
+define('VERSION', '2.1');
+// ╠══════════════════════════════════════════════════════════════╣
+// ║  Текстовые расширения (редактируются в Monaco Editor)        ║
+define('TEXT_EXTENSIONS', array(
+    'php','html','htm','css','js','jsx','ts','tsx','vue',
+    'json','xml','svg','sql','yaml','yml','toml','ini','cfg','conf','env',
+    'lua','py','rb','sh','bash','bat','cmd','ps1',
+    'c','h','cpp','hpp','cs','java','kt','go','rs','swift','r','pl',
+    'txt','md','log'
+));
+// ╚══════════════════════════════════════════════════════════════╝
 
-if (!$isLoggedIn) {
-    header("HTTP/1.1 403 Forbidden");
-    exit("Доступ запрещен. Требуется авторизация.");
+// ── Авторизация ──────────────────────────────────
+// Выход
+if (isset($_GET['logout'])) {
+    session_destroy();
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+    exit;
 }
+
+$authError = '';
+
+if (AUTH_ENABLED) {
+    // Обработка формы входа
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do_login'])) {
+        if ($_POST['login'] === AUTH_LOGIN && $_POST['password'] === AUTH_PASSWORD) {
+            $_SESSION['kd_auth'] = true;
+            header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+            exit;
+        } else {
+            $authError = 'Неверный логин или пароль.';
+        }
+    }
+
+    // Проверка сессии
+    if (empty($_SESSION['kd_auth'])) {
+        // Показываем страницу входа и выходим
+        ?><!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KOFFEE DEVELOPER — Вход</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#1e1e1e;color:#ccc;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;display:flex;align-items:center;justify-content:center;}
+.login-wrap{width:360px;}
+.login-logo{text-align:center;margin-bottom:32px;}
+.login-logo .kd{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:linear-gradient(135deg,#6c3483,#1a5276);border-radius:12px;font-size:20px;font-weight:800;color:#fff;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);}
+.login-logo h1{font-size:18px;font-weight:600;color:#fff;letter-spacing:0.02em;}
+.login-logo p{font-size:12px;color:#555;margin-top:4px;}
+.login-box{background:#252526;border:1px solid #3c3c3c;border-radius:8px;padding:28px;box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:12px;color:#858585;margin-bottom:6px;}
+.form-group input{width:100%;background:#3c3c3c;border:1px solid #474747;border-radius:4px;padding:9px 12px;color:#fff;font-size:14px;outline:none;transition:border-color .15s;}
+.form-group input:focus{border-color:#007acc;}
+.form-group .input-wrap{position:relative;}
+.form-group .toggle-pw{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#555;cursor:pointer;font-size:13px;}
+.form-group .toggle-pw:hover{color:#ccc;}
+.btn-login{width:100%;background:#007acc;color:#fff;border:none;border-radius:4px;padding:10px;font-size:14px;cursor:pointer;transition:background .15s;margin-top:4px;}
+.btn-login:hover{background:#0098ff;}
+.login-error{background:rgba(244,71,71,.12);border:1px solid rgba(244,71,71,.3);border-radius:4px;padding:9px 12px;font-size:13px;color:#f47171;margin-bottom:16px;}
+.login-footer{text-align:center;margin-top:20px;font-size:11px;color:#444;}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+    <div class="login-logo">
+        <div class="kd">KD</div>
+        <h1>KOFFEE DEVELOPER</h1>
+        <p>File Manager v<?= VERSION ?></p>
+    </div>
+    <div class="login-box">
+        <?php if ($authError): ?>
+        <div class="login-error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($authError) ?></div>
+        <?php endif; ?>
+        <form method="post">
+            <input type="hidden" name="do_login" value="1">
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" name="login" autofocus autocomplete="username" placeholder="Введите логин">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <div class="input-wrap">
+                    <input type="password" name="password" id="pwField" autocomplete="current-password" placeholder="Введите пароль">
+                    <button type="button" class="toggle-pw" onclick="var f=document.getElementById('pwField');f.type=f.type==='password'?'text':'password'"><i class="fas fa-eye"></i></button>
+                </div>
+            </div>
+            <button type="submit" class="btn-login"><i class="fas fa-sign-in-alt"></i> Войти</button>
+        </form>
+    </div>
+    <div class="login-footer">Только для авторизованных пользователей</div>
+</div>
+</body>
+</html><?php
+        exit;
+    }
+} // end if AUTH_ENABLED
+
+$isLoggedIn = true;
 
 
 // Получаем путь к запрашиваемому файлу
@@ -195,13 +316,12 @@ function createNewFile($parentDir) {
     if (!is_dir($parentDir)) return false;
     
     $fileName = trim($_POST['new_file_name']);
-    if (empty($fileName)) return false;
     
     $filePath = $parentDir . '/' . $fileName;
     if (file_exists($filePath)) return false;
     
     $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-    if (!in_array($extension, ['php', 'html', 'css', 'js', 'json', 'txt', 'md'])) {
+    if (!in_array($extension, TEXT_EXTENSIONS)) {
         return false;
     }
     
@@ -214,7 +334,7 @@ function saveFileContent($path, $content) {
     if (!is_file($path)) return false;
     
     $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    if (!in_array($extension, ['php', 'html', 'css', 'js', 'json', 'txt', 'md'])) {
+    if (!in_array($extension, TEXT_EXTENSIONS)) {
         return false;
     }
     
@@ -556,17 +676,25 @@ function displayFileContent($path) {
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            transition: width 0.2s;
+            transition: width 0.2s, min-width 0.2s;
+        }
+        /* Десктоп: скрытый sidebar */
+        .sidebar.hidden {
+            width: 0 !important;
+            min-width: 0 !important;
+            border-right: none;
+            overflow: hidden;
         }
         @media (max-width: 767px) {
             .sidebar {
                 position: fixed;
                 left: -100%; top: 30px; bottom: 0;
-                width: 80%; min-width: 0;
+                width: 80% !important; min-width: 0 !important;
                 z-index: 1000;
                 transition: left 0.25s ease;
             }
-            .sidebar.active { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,0.5); }
+            .sidebar.active  { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,0.5); }
+            .sidebar.hidden  { left: -100%; width: 80% !important; }
         }
         .sidebar-overlay {
             display: none;
@@ -1038,40 +1166,25 @@ function displayFileContent($path) {
             to   { transform: translateX(0);    opacity: 1; }
         }
 
-        /* ── Loader ── */
-        .loader-overlay {
-            position: fixed; inset: 0;
-            background: #1e1e1e;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            z-index: 9999;
-            transition: opacity 0.4s ease;
+        /* ── Loader — убран ── */
+
+        /* ── Tab extras ── */
+        .tab-spacer { flex: 1; min-width: 8px; }
+        .tab-actions {
+            display: flex; align-items: center; gap: 2px;
+            padding: 0 6px; flex-shrink: 0;
+            border-left: 1px solid var(--vsc-border);
         }
-        .loader-overlay.fade-out { opacity: 0; pointer-events: none; }
-        .loader-logo {
-            font-size: 13px;
-            color: var(--vsc-fg-dim);
-            font-family: 'Consolas', monospace;
-            margin-bottom: 24px;
-            letter-spacing: 0.05em;
+        .tab-action-btn {
+            width: 28px; height: 28px;
+            display: flex; align-items: center; justify-content: center;
+            background: none; border: none;
+            color: var(--vsc-fg-dim); cursor: pointer;
+            border-radius: 4px; font-size: 13px;
+            transition: color .15s, background .15s;
         }
-        .loader-logo span { color: var(--vsc-accent); }
-        .loader-bar {
-            width: 200px; height: 2px;
-            background: #333;
-            border-radius: 2px;
-            overflow: hidden;
-        }
-        .loader-bar-fill {
-            height: 100%; width: 0;
-            background: var(--vsc-accent);
-            animation: loadBar 1s ease-out forwards;
-        }
-        @keyframes loadBar {
-            0%   { width: 0; }
-            60%  { width: 70%; }
-            100% { width: 100%; }
-        }
+        .tab-action-btn:hover { color: var(--vsc-fg-bright); background: var(--vsc-hover); }
+        .tab-action-btn.copied { color: var(--vsc-success) !important; }
 
         /* ── Rename form ── */
         .rename-form-container {
@@ -1157,16 +1270,10 @@ function displayFileContent($path) {
 </head>
 <body>
 
-<!-- ═══════ LOADER ═══════ -->
-<div class="loader-overlay" id="loaderOverlay">
-    <div class="loader-logo">KOFFEE <span>DEVELOPER</span> — File Manager v<?= VERSION ?></div>
-    <div class="loader-bar"><div class="loader-bar-fill"></div></div>
-</div>
-
 <!-- ═══════ ACTIVITY BAR ═══════ -->
 <div class="activity-bar">
     <div class="activity-bar-logo" title="KOFFEE DEVELOPER">KD</div>
-    <button class="activity-btn active" title="Проводник" onclick="document.getElementById('sidebar').classList.toggle('active'); document.getElementById('sidebarOverlay').classList.toggle('active')">
+    <button class="activity-btn active" id="explorerBtn" title="Проводник">
         <i class="fas fa-copy"></i>
     </button>
     <button class="activity-btn" title="Command Palette (Ctrl+P)" onclick="openCmdPalette()">
@@ -1188,6 +1295,9 @@ function displayFileContent($path) {
         <button class="activity-btn" title="О программе" onclick="showModal('versionModal')">
             <i class="fas fa-info-circle"></i>
         </button>
+        <a href="?logout=1" class="activity-btn" title="Выйти из аккаунта" onclick="return confirm('Выйти?')" style="color:#f47171;text-decoration:none;">
+            <i class="fas fa-sign-out-alt"></i>
+        </a>
     </div>
 </div>
 
@@ -1209,51 +1319,55 @@ function displayFileContent($path) {
         </div>
     </div>
 
-    <!-- Tab bar -->
-    <div class="tab-bar">
+    <!-- Tab bar — multi-tab -->
+    <div class="tab-bar" id="tabBar">
         <?php
         $tabExt = $isFile ? strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)) : '';
-        $tabIconClass = match($tabExt) {
-            'js'   => 'fab fa-js-square',
-            'php'  => 'fab fa-php',
-            'html' => 'fab fa-html5',
-            'css'  => 'fab fa-css3-alt',
-            'json' => 'fas fa-code',
-            'md'   => 'fab fa-markdown',
-            'jpg','jpeg','png','gif' => 'fas fa-image',
-            'mp3','wav','ogg'        => 'fas fa-music',
-            default => $isFile ? 'fas fa-file-alt' : 'fas fa-folder-open',
-        };
-        $tabIconColor = match($tabExt) {
-            'js'   => '#f1e05a',
-            'php'  => '#8892be',
-            'html' => '#e34c26',
-            'css'  => '#563d7c',
-            'json' => '#40a0ff',
-            'md'   => '#4078c0',
-            'jpg','jpeg','png','gif' => '#50fa7b',
-            'mp3','wav','ogg'        => '#ff79c6',
-            default => $isFile ? '#858585' : '#dcb67a',
-        };
+        if ($tabExt === 'js')                                       { $tabIconClass = 'fab fa-js-square';  $tabIconColor = '#f1e05a'; }
+        elseif ($tabExt === 'php')                                  { $tabIconClass = 'fab fa-php';         $tabIconColor = '#8892be'; }
+        elseif ($tabExt === 'html')                                 { $tabIconClass = 'fab fa-html5';       $tabIconColor = '#e34c26'; }
+        elseif ($tabExt === 'css')                                  { $tabIconClass = 'fab fa-css3-alt';    $tabIconColor = '#563d7c'; }
+        elseif ($tabExt === 'json')                                 { $tabIconClass = 'fas fa-code';        $tabIconColor = '#40a0ff'; }
+        elseif ($tabExt === 'md')                                   { $tabIconClass = 'fab fa-markdown';    $tabIconColor = '#4078c0'; }
+        elseif (in_array($tabExt, array('jpg','jpeg','png','gif'))) { $tabIconClass = 'fas fa-image';       $tabIconColor = '#50fa7b'; }
+        elseif (in_array($tabExt, array('mp3','wav','ogg')))        { $tabIconClass = 'fas fa-music';       $tabIconColor = '#ff79c6'; }
+        elseif ($isFile)                                            { $tabIconClass = 'fas fa-file-alt';    $tabIconColor = '#858585'; }
+        else                                                        { $tabIconClass = 'fas fa-folder-open'; $tabIconColor = '#dcb67a'; }
         $tabLabel = $isFile ? htmlspecialchars(basename($absolutePath)) : ($requestedPath ? htmlspecialchars(basename($absolutePath)) : 'root');
+        $tabPath  = htmlspecialchars($requestedPath);
         ?>
-        <div class="tab active">
+        <!-- Saved tabs rendered by JS from localStorage, then current active tab -->
+        <div class="tab active" id="currentTab"
+             data-path="<?= $tabPath ?>"
+             data-label="<?= $tabLabel ?>"
+             data-icon="<?= $tabIconClass ?>"
+             data-color="<?= $tabIconColor ?>">
             <span class="tab-icon" style="color:<?= $tabIconColor ?>"><i class="<?= $tabIconClass ?>"></i></span>
             <span class="tab-name"><?= $tabLabel ?></span>
-            <span class="tab-close"><i class="fas fa-times"></i></span>
+            <span class="tab-close" onclick="closeTab(event, '<?= $tabPath ?>')"><i class="fas fa-times"></i></span>
+        </div>
+        <div class="tab-spacer"></div>
+        <!-- Copy link button -->
+        <div class="tab-actions">
+            <?php if ($isFile): ?>
+            <button class="tab-action-btn" id="copyLinkBtn" title="Копировать прямую ссылку на файл">
+                <i class="fas fa-link"></i>
+            </button>
+            <button class="tab-action-btn" id="copyDomainBtn" title="Копировать URL сайта (домен)">
+                <i class="fas fa-globe"></i>
+            </button>
+            <?php endif; ?>
         </div>
     </div>
 
     <div class="content-area">
         <!-- Mobile overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"
-             onclick="this.classList.remove('active'); document.getElementById('sidebar').classList.remove('active')">
-        </div>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
         <!-- ═══════ SIDEBAR ═══════ -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-mobile-header">
-                <button class="sidebar-icon-btn" onclick="document.getElementById('sidebar').classList.remove('active'); document.getElementById('sidebarOverlay').classList.remove('active')" id="closeMobileMenuBtn">
+                <button class="sidebar-icon-btn" id="closeMobileMenuBtn">
                     <i class="fas fa-times"></i>
                 </button>
                 <span class="sidebar-title" style="font-size:13px;font-weight:600;">ПРОВОДНИК</span>
@@ -1288,30 +1402,27 @@ function displayFileContent($path) {
             <div class="file-tree">
                 <?php foreach ($filesList as $file):
                     $fext = strtolower($file['extension']);
-                    $fIconFa = match(true) {
-                        $file['is_dir']                           => 'fas fa-folder',
-                        in_array($fext,['jpg','jpeg','png','gif'])=> 'fas fa-image',
-                        in_array($fext,['mp3','wav','ogg'])       => 'fas fa-music',
-                        $fext === 'js'                            => 'fab fa-js-square',
-                        $fext === 'php'                           => 'fab fa-php',
-                        $fext === 'html'                          => 'fab fa-html5',
-                        $fext === 'css'                           => 'fab fa-css3-alt',
-                        $fext === 'json'                          => 'fas fa-code',
-                        $fext === 'md'                            => 'fab fa-markdown',
-                        default                                   => 'fas fa-file-alt',
-                    };
-                    $fIconCls = match(true) {
-                        $file['is_dir']                           => 'folder',
-                        in_array($fext,['jpg','jpeg','png','gif'])=> 'image',
-                        in_array($fext,['mp3','wav','ogg'])       => 'audio',
-                        $fext === 'js'                            => 'js',
-                        $fext === 'php'                           => 'php',
-                        $fext === 'html'                          => 'html',
-                        $fext === 'css'                           => 'css',
-                        $fext === 'json'                          => 'json',
-                        $fext === 'md'                            => 'md',
-                        default                                   => 'other',
-                    };
+                    if ($file['is_dir']) {
+                        $fIconFa = 'fas fa-folder'; $fIconCls = 'folder';
+                    } elseif (in_array($fext, array('jpg','jpeg','png','gif'))) {
+                        $fIconFa = 'fas fa-image';  $fIconCls = 'image';
+                    } elseif (in_array($fext, array('mp3','wav','ogg'))) {
+                        $fIconFa = 'fas fa-music';  $fIconCls = 'audio';
+                    } elseif ($fext === 'js') {
+                        $fIconFa = 'fab fa-js-square'; $fIconCls = 'js';
+                    } elseif ($fext === 'php') {
+                        $fIconFa = 'fab fa-php';    $fIconCls = 'php';
+                    } elseif ($fext === 'html') {
+                        $fIconFa = 'fab fa-html5';  $fIconCls = 'html';
+                    } elseif ($fext === 'css') {
+                        $fIconFa = 'fab fa-css3-alt'; $fIconCls = 'css';
+                    } elseif ($fext === 'json') {
+                        $fIconFa = 'fas fa-code';   $fIconCls = 'json';
+                    } elseif ($fext === 'md') {
+                        $fIconFa = 'fab fa-markdown'; $fIconCls = 'md';
+                    } else {
+                        $fIconFa = 'fas fa-file-alt'; $fIconCls = 'other';
+                    }
                     $isActive = ($absolutePath === $file['path']) ? 'active' : '';
                     $fileLinkPath = urlencode($requestedPath . ($requestedPath ? '/' : '') . $file['name']);
                 ?>
@@ -1383,7 +1494,7 @@ function displayFileContent($path) {
                     <?php endif; ?>
                 </div>
 
-                <?php if ($isFile && in_array(strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)), ['php','html','css','js','json','txt','md'])): ?>
+                <?php if ($isFile && in_array(strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)), TEXT_EXTENSIONS)): ?>
                 <div class="toolbar-group">
                     <div class="toolbar-sep"></div>
                     <button class="toolbar-btn primary" id="editBtn">
@@ -1466,7 +1577,7 @@ function displayFileContent($path) {
                 <?php elseif ($isFile): ?>
                     <?php
                     $fileContent = '';
-                    if (in_array($previewExt, ['php','html','css','js','json','txt','md'])) {
+                    if (in_array($previewExt, TEXT_EXTENSIONS)) {
                         if (filesize($absolutePath) <= MAX_FILE_SIZE) {
                             $fileContent = file_get_contents($absolutePath);
                         }
@@ -1487,7 +1598,7 @@ function displayFileContent($path) {
 
             <!-- Status bar -->
             <div class="status-bar">
-                <div class="status-item" onclick="document.getElementById('sidebar').classList.toggle('active'); document.getElementById('sidebarOverlay').classList.toggle('active')" title="Переключить проводник">
+                <div class="status-item" onclick="toggleSidebar()" title="Переключить проводник" style="cursor:pointer;">
                     <i class="fas fa-code-branch"></i> main
                 </div>
                 <?php if ($isFile): ?>
@@ -1501,16 +1612,21 @@ function displayFileContent($path) {
                     <div class="status-item" id="statusCursor">Ln 1, Col 1</div>
                     <div class="status-item">UTF-8</div>
                     <div class="status-item" id="statusLang">
-                        <?= match($previewExt) {
-                            'php'  => 'PHP',
-                            'js'   => 'JavaScript',
-                            'html' => 'HTML',
-                            'css'  => 'CSS',
-                            'json' => 'JSON',
-                            'md'   => 'Markdown',
-                            'txt'  => 'Plain Text',
-                            default => strtoupper($previewExt) ?: 'Binary',
-                        } ?>
+                        <?php
+                        $langNames = array(
+                            'php'=>'PHP','js'=>'JavaScript','jsx'=>'JavaScript','ts'=>'TypeScript','tsx'=>'TypeScript',
+                            'html'=>'HTML','htm'=>'HTML','css'=>'CSS','json'=>'JSON','xml'=>'XML','svg'=>'XML',
+                            'vue'=>'Vue','md'=>'Markdown','txt'=>'Plain Text','log'=>'Plain Text',
+                            'lua'=>'Lua','py'=>'Python','rb'=>'Ruby',
+                            'sh'=>'Shell','bash'=>'Shell','bat'=>'Batch','cmd'=>'Batch','ps1'=>'PowerShell',
+                            'c'=>'C','h'=>'C','cpp'=>'C++','hpp'=>'C++','cs'=>'C#',
+                            'java'=>'Java','kt'=>'Kotlin','go'=>'Go','rs'=>'Rust','swift'=>'Swift',
+                            'r'=>'R','pl'=>'Perl','sql'=>'SQL',
+                            'yaml'=>'YAML','yml'=>'YAML','toml'=>'TOML',
+                            'ini'=>'INI','cfg'=>'INI','conf'=>'Config','env'=>'ENV',
+                        );
+                        echo isset($langNames[$previewExt]) ? $langNames[$previewExt] : ($previewExt ? strtoupper($previewExt) : 'Binary');
+                        ?>
                     </div>
                     <?php endif; ?>
                     <div class="status-item" onclick="showModal('versionModal')" style="cursor:pointer;">
@@ -1543,7 +1659,7 @@ function displayFileContent($path) {
             <i class="fas fa-sync-alt"></i> Обновить страницу
             <span class="cmd-kbd">F5</span>
         </div>
-        <?php if ($isFile && in_array($previewExt, ['php','html','css','js','json','txt','md'])): ?>
+        <?php if ($isFile && in_array($previewExt, TEXT_EXTENSIONS)): ?>
         <div class="cmd-item" onclick="triggerEdit(); closeCmdPalette()">
             <i class="fas fa-edit"></i> Редактировать файл
             <span class="cmd-kbd">Ctrl+E</span>
@@ -1670,7 +1786,7 @@ function displayFileContent($path) {
                            pattern="[^\/\\:*?&quot;&lt;&gt;|]+\.[a-zA-Z0-9]+"
                            placeholder="example.php" title="Введите имя с расширением" autofocus>
                 </div>
-                <div style="font-size:11px;color:var(--vsc-fg-dim);">Поддерживаемые расширения: php, html, css, js, json, txt, md</div>
+                <div style="font-size:11px;color:var(--vsc-fg-dim);">Поддерживаемые расширения: php, html, css, js, ts, json, xml, lua, py, rb, sh, c, cpp, cs, java, go, rs, sql, md, txt, yaml, ini и др.</div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideModal('newFileModal')">Отмена</button>
@@ -1688,17 +1804,51 @@ function displayFileContent($path) {
             <button class="modal-close" onclick="hideModal('versionModal')">&times;</button>
         </div>
         <div class="modal-body">
-            <div style="font-size:12px;color:var(--vsc-fg-dim);margin-bottom:8px;">Что нового:</div>
-            <ul style="padding-left:16px;color:var(--vsc-fg);font-size:13px;line-height:2;">
-                <li>Редизайн интерфейса в стиле VS Code</li>
-                <li>Activity Bar с быстрыми действиями</li>
-                <li>Command Palette (Ctrl+P)</li>
-                <li>Цветные иконки файлов по типу</li>
-                <li>Горячие клавиши редактора</li>
-                <li>Статус-бар с позицией курсора</li>
-                <li>Поддержка музыкальных файлов</li>
-            </ul>
-            <p style="font-size:11px;color:var(--vsc-fg-dim);margin-top:12px;">Дата сборки: <?= date('d.m.Y') ?></p>
+            <!-- Changelog -->
+            <div style="font-size:12px;color:var(--vsc-fg-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Changelog</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                <div style="background:#1e1e1e;border-radius:4px;padding:10px 12px;border-left:2px solid var(--vsc-accent);">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:13px;font-weight:600;color:#fff;">v2.1</span>
+                        <span style="font-size:11px;color:var(--vsc-fg-dim);">11.06.2025</span>
+                    </div>
+                    <ul style="padding-left:14px;color:var(--vsc-fg);font-size:12px;line-height:1.9;margin:0;">
+                        <li>Авторизация с логином и паролем</li>
+                        <li>Возможность отключить авторизацию</li>
+                        <li>Мульти-вкладки файлов (localStorage)</li>
+                        <li>Кнопки копирования прямой ссылки</li>
+                        <li>Расширенная поддержка языков (Lua, Python, C++, SQL и др.)</li>
+                        <li>Исправлена кнопка проводника</li>
+                        <li>Убран эффект загрузки</li>
+                    </ul>
+                </div>
+                <div style="background:#1e1e1e;border-radius:4px;padding:10px 12px;border-left:2px solid #555;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:13px;font-weight:600;color:#999;">v2.0</span>
+                        <span style="font-size:11px;color:var(--vsc-fg-dim);">ранее</span>
+                    </div>
+                    <ul style="padding-left:14px;color:#777;font-size:12px;line-height:1.9;margin:0;">
+                        <li>Редизайн интерфейса в стиле VS Code</li>
+                        <li>Activity Bar, Tab Bar, Status Bar</li>
+                        <li>Command Palette (Ctrl+P)</li>
+                        <li>Monaco Editor с подсветкой синтаксиса</li>
+                        <li>Цветные иконки файлов по типу</li>
+                    </ul>
+                </div>
+            </div>
+            <!-- Info -->
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--vsc-border);">
+                <div style="font-size:13px;color:var(--vsc-fg);display:flex;flex-direction:column;gap:5px;">
+                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Автор:</span> <span style="color:var(--vsc-accent);font-weight:600;">INK</span></div>
+                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Команда:</span> <span style="color:#ccc;">KOFFEE TEAM</span></div>
+                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Версия:</span> <span style="color:#ccc;"><?= VERSION ?></span></div>
+                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Сборка:</span> <span style="color:#ccc;">11.06.2025</span></div>
+                </div>
+            </div>
+            <div style="margin-top:12px;padding:9px 12px;background:rgba(0,122,204,0.08);border:1px solid rgba(0,122,204,0.2);border-radius:4px;font-size:11px;color:#777;line-height:1.7;">
+                <i class="fas fa-info-circle" style="color:var(--vsc-accent);margin-right:6px;"></i>
+                При модификации данного ПО просьба указать автора оригинального — <strong style="color:#bbb;">INK / KOFFEE TEAM</strong>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="hideModal('versionModal')">Закрыть</button>
@@ -1715,70 +1865,310 @@ function displayFileContent($path) {
 <!-- ═══════ SCRIPTS ═══════ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 <script>
-// ── Modal helpers ──
-function showModal(id) {
-    document.getElementById(id).classList.add('show');
-    document.getElementById(id).style.display = 'flex';
-}
-function hideModal(id) {
-    document.getElementById(id).classList.remove('show');
-    document.getElementById(id).style.display = 'none';
+// ════════════════════════════════════════════
+//  SIDEBAR TOGGLE
+// ════════════════════════════════════════════
+var sidebar        = document.getElementById('sidebar');
+var sidebarOverlay = document.getElementById('sidebarOverlay');
+var explorerBtn    = document.getElementById('explorerBtn');
+var isMobile       = function() { return window.innerWidth <= 767; };
+
+function toggleSidebar() {
+    if (isMobile()) {
+        // Мобильный: слайд влево/вправо через класс active
+        var open = sidebar.classList.contains('active');
+        if (open) {
+            sidebar.classList.remove('active');
+            sidebarOverlay.classList.remove('active');
+            if (explorerBtn) explorerBtn.classList.remove('active');
+        } else {
+            sidebar.classList.add('active');
+            sidebarOverlay.classList.add('active');
+            if (explorerBtn) explorerBtn.classList.add('active');
+        }
+    } else {
+        // Десктоп: скрыть/показать через класс hidden (width: 0)
+        var hidden = sidebar.classList.contains('hidden');
+        if (hidden) {
+            sidebar.classList.remove('hidden');
+            if (explorerBtn) explorerBtn.classList.add('active');
+        } else {
+            sidebar.classList.add('hidden');
+            if (explorerBtn) explorerBtn.classList.remove('active');
+        }
+    }
 }
 
-// Close modal on backdrop click
-document.querySelectorAll('.modal').forEach(modal => {
+// Стартовое состояние — sidebar открыт, кнопка активна
+if (explorerBtn) explorerBtn.classList.add('active');
+
+// Wire up explorer button
+if (explorerBtn) explorerBtn.addEventListener('click', toggleSidebar);
+
+// Overlay click closes sidebar (mobile)
+if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', function() {
+        sidebar.classList.remove('active');
+        sidebarOverlay.classList.remove('active');
+        if (explorerBtn) explorerBtn.classList.remove('active');
+    });
+}
+
+// Close mobile sidebar button (inside sidebar header)
+var closeMobileBtn = document.getElementById('closeMobileMenuBtn');
+if (closeMobileBtn) {
+    closeMobileBtn.addEventListener('click', function() {
+        sidebar.classList.remove('active');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+        if (explorerBtn) explorerBtn.classList.remove('active');
+    });
+}
+
+// При смене размера окна сбрасываем классы во избежание конфликтов
+window.addEventListener('resize', function() {
+    if (!isMobile()) {
+        sidebar.classList.remove('active');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+    } else {
+        sidebar.classList.remove('hidden');
+    }
+});
+
+// ════════════════════════════════════════════
+//  MODAL HELPERS
+// ════════════════════════════════════════════
+function showModal(id) {
+    var el = document.getElementById(id);
+    el.classList.add('show');
+    el.style.display = 'flex';
+}
+function hideModal(id) {
+    var el = document.getElementById(id);
+    el.classList.remove('show');
+    el.style.display = 'none';
+}
+document.querySelectorAll('.modal').forEach(function(modal) {
     modal.addEventListener('click', function(e) {
         if (e.target === this) hideModal(this.id);
     });
 });
 
-// ── Notification ──
-function showNotification(text, type = 'success') {
-    const n = document.getElementById('notification');
-    const nt = document.getElementById('notificationText');
+// ════════════════════════════════════════════
+//  NOTIFICATION
+// ════════════════════════════════════════════
+function showNotification(text, type) {
+    type = type || 'success';
+    var n = document.getElementById('notification');
+    var nt = document.getElementById('notificationText');
     n.className = 'notification show ' + type;
     nt.textContent = text;
     n.style.display = 'flex';
-    setTimeout(() => { n.style.display = 'none'; }, 3000);
+    setTimeout(function() { n.style.display = 'none'; }, 3000);
 }
 
-// ── Rename modal ──
+// ════════════════════════════════════════════
+//  MULTI-TAB SYSTEM (localStorage)
+// ════════════════════════════════════════════
+var TABS_KEY = 'kd_tabs_v1';
+var currentPath = <?= json_encode($requestedPath) ?>;
+var currentLabel = <?= json_encode($isFile ? basename($absolutePath) : ($requestedPath ? basename($absolutePath) : 'root')) ?>;
+var currentIcon  = <?= json_encode($tabIconClass) ?>;
+var currentColor = <?= json_encode($tabIconColor) ?>;
+var isCurrentFile = <?= $isFile ? 'true' : 'false' ?>;
+
+function loadTabs() {
+    try { return JSON.parse(localStorage.getItem(TABS_KEY)) || []; }
+    catch(e) { return []; }
+}
+function saveTabs(tabs) {
+    try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs)); } catch(e) {}
+}
+
+function renderTabs() {
+    var tabs = loadTabs();
+    var bar = document.getElementById('tabBar');
+    // Remove all dynamic tabs (not current, not spacer, not actions)
+    bar.querySelectorAll('.tab.dynamic').forEach(function(t) { t.remove(); });
+
+    var currentTab = document.getElementById('currentTab');
+    tabs.forEach(function(tab) {
+        if (tab.path === currentPath) return; // skip — already shown as active
+        var el = document.createElement('div');
+        el.className = 'tab dynamic';
+        el.setAttribute('data-path', tab.path);
+        el.title = tab.label;
+        el.innerHTML =
+            '<span class="tab-icon" style="color:' + tab.color + '"><i class="' + tab.icon + '"></i></span>' +
+            '<span class="tab-name">' + escHtml(tab.label) + '</span>' +
+            '<span class="tab-close" data-close="' + escHtml(tab.path) + '"><i class="fas fa-times"></i></span>';
+        el.addEventListener('click', function(e) {
+            if (e.target.closest('.tab-close')) return;
+            window.location.href = '?path=' + encodeURIComponent(tab.path);
+        });
+        el.querySelector('.tab-close').addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeTab(e, tab.path);
+        });
+        // Insert before current tab
+        bar.insertBefore(el, currentTab);
+    });
+}
+
+function addCurrentTab() {
+    var tabs = loadTabs();
+    var exists = tabs.some(function(t) { return t.path === currentPath; });
+    if (!exists && isCurrentFile) {
+        tabs.push({ path: currentPath, label: currentLabel, icon: currentIcon, color: currentColor });
+        if (tabs.length > 20) tabs.shift(); // max 20 tabs
+        saveTabs(tabs);
+    }
+}
+
+function closeTab(e, path) {
+    e.stopPropagation();
+    var tabs = loadTabs();
+    tabs = tabs.filter(function(t) { return t.path !== path; });
+    saveTabs(tabs);
+    if (path === currentPath) {
+        // Navigate to last remaining tab or root
+        if (tabs.length > 0) {
+            window.location.href = '?path=' + encodeURIComponent(tabs[tabs.length - 1].path);
+        } else {
+            window.location.href = '?path=';
+        }
+    } else {
+        renderTabs();
+    }
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Init tabs on load
+addCurrentTab();
+renderTabs();
+
+// ════════════════════════════════════════════
+//  COPY LINK BUTTONS
+// ════════════════════════════════════════════
+var fileRelPath = <?= json_encode($isFile ? str_replace(BASE_DIR, '', $absolutePath) : '') ?>;
+
+function copyToClipboard(text, btn) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            btn.classList.add('copied');
+            showNotification('Скопировано: ' + text, 'success');
+            setTimeout(function() { btn.classList.remove('copied'); }, 2000);
+        });
+    } else {
+        // Fallback
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.classList.add('copied');
+        showNotification('Скопировано: ' + text, 'success');
+        setTimeout(function() { btn.classList.remove('copied'); }, 2000);
+    }
+}
+
+var copyLinkBtn = document.getElementById('copyLinkBtn');
+var copyDomainBtn = document.getElementById('copyDomainBtn');
+
+if (copyLinkBtn) {
+    copyLinkBtn.addEventListener('click', function() {
+        // Прямая ссылка на файл (домен + относительный путь файла)
+        var url = window.location.protocol + '//' + window.location.host + fileRelPath;
+        copyToClipboard(url, this);
+    });
+}
+if (copyDomainBtn) {
+    copyDomainBtn.addEventListener('click', function() {
+        // Просто домен (origin)
+        var url = window.location.protocol + '//' + window.location.host + '/';
+        copyToClipboard(url, this);
+    });
+}
+
+// ════════════════════════════════════════════
+//  RENAME MODAL
+// ════════════════════════════════════════════
 function openRenameModal(name, pathEncoded) {
     document.getElementById('renameInput').value = name;
     document.getElementById('renameForm').action = '?path=' + pathEncoded + '&action=rename_post';
     showModal('renameModal');
-    setTimeout(() => document.getElementById('renameInput').select(), 50);
+    setTimeout(function() { document.getElementById('renameInput').select(); }, 50);
 }
 
-// ── Command Palette ──
+// ════════════════════════════════════════════
+//  COMMAND PALETTE
+// ════════════════════════════════════════════
 function openCmdPalette() {
     document.getElementById('cmdPalette').classList.add('show');
     document.getElementById('cmdOverlay').style.display = 'block';
-    setTimeout(() => document.getElementById('cmdInput').focus(), 50);
+    setTimeout(function() { document.getElementById('cmdInput').focus(); }, 50);
 }
 function closeCmdPalette() {
     document.getElementById('cmdPalette').classList.remove('show');
     document.getElementById('cmdOverlay').style.display = 'none';
 }
 
-// ── Monaco Editor ──
-let monacoEditor = null;
-let isEditMode = false;
-let wordWrapEnabled = true;
-let minimapEnabled = true;
+// ════════════════════════════════════════════
+//  MONACO EDITOR
+// ════════════════════════════════════════════
+var monacoEditor = null;
+var isEditMode = false;
+var wordWrapEnabled = true;
+var minimapEnabled = true;
 
-const isTextFile = <?= ($isFile && in_array(strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)), ['php','html','css','js','json','txt','md'])) ? 'true' : 'false' ?>;
-const fileExtension = '<?= $isFile ? strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)) : "" ?>';
+var isTextFile = <?= ($isFile && in_array(strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)), TEXT_EXTENSIONS)) ? 'true' : 'false' ?>;
+var fileExtension = '<?= $isFile ? strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION)) : "" ?>';
 
 function getLang(ext) {
-    const map = { js:'javascript', php:'php', html:'html', css:'css', json:'json', md:'markdown', txt:'plaintext' };
+    var map = {
+        // Web
+        'js': 'javascript', 'jsx': 'javascript', 'ts': 'typescript', 'tsx': 'typescript',
+        'php': 'php', 'html': 'html', 'htm': 'html', 'css': 'css',
+        'json': 'json', 'xml': 'xml', 'svg': 'xml',
+        'vue': 'html',
+        // Скрипты / геймдев
+        'lua': 'lua',
+        'py': 'python',
+        'rb': 'ruby',
+        'sh': 'shell', 'bash': 'shell',
+        'bat': 'bat', 'cmd': 'bat',
+        'ps1': 'powershell',
+        // Системные языки
+        'c': 'c', 'h': 'c',
+        'cpp': 'cpp', 'hpp': 'cpp',
+        'cs': 'csharp',
+        'java': 'java',
+        'kt': 'kotlin',
+        'go': 'go',
+        'rs': 'rust',
+        'swift': 'swift',
+        'r': 'r',
+        'pl': 'perl',
+        // Данные / конфиги
+        'sql': 'sql',
+        'yaml': 'yaml', 'yml': 'yaml',
+        'toml': 'ini',
+        'ini': 'ini', 'cfg': 'ini', 'conf': 'ini', 'env': 'ini',
+        'md': 'markdown',
+        'txt': 'plaintext', 'log': 'plaintext'
+    };
     return map[ext] || 'plaintext';
 }
 
-function initMonaco(editMode = false) {
+function initMonaco(editMode) {
+    editMode = editMode || false;
     require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
     require(['vs/editor/editor.main'], function() {
-        const content = document.getElementById('file-content')?.textContent || '';
+        var content = (document.getElementById('file-content') || {}).textContent || '';
         monacoEditor = monaco.editor.create(document.getElementById('editor-container'), {
             value: content,
             language: getLang(fileExtension),
@@ -1800,27 +2190,22 @@ function initMonaco(editMode = false) {
             cursorSmoothCaretAnimation: 'on',
             padding: { top: 12 },
             suggest: { showKeywords: true },
-            quickSuggestions: true,
+            quickSuggestions: true
         });
-
-        // Track cursor position
-        monacoEditor.onDidChangeCursorPosition(e => {
-            const el = document.getElementById('statusCursor');
-            if (el) el.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+        monacoEditor.onDidChangeCursorPosition(function(e) {
+            var el = document.getElementById('statusCursor');
+            if (el) el.textContent = 'Ln ' + e.position.lineNumber + ', Col ' + e.position.column;
         });
-
-        if (editMode) {
-            showEditorButtons();
-        }
+        if (editMode) showEditorButtons();
     });
 }
 
 function showEditorButtons() {
-    ['saveBtn','toggleWordWrapBtn','toggleMinimapBtn','formatBtn'].forEach(id => {
-        const el = document.getElementById(id);
+    ['saveBtn','toggleWordWrapBtn','toggleMinimapBtn','formatBtn'].forEach(function(id) {
+        var el = document.getElementById(id);
         if (el) el.style.display = 'inline-flex';
     });
-    const editBtn = document.getElementById('editBtn');
+    var editBtn = document.getElementById('editBtn');
     if (editBtn) editBtn.style.display = 'none';
 }
 
@@ -1845,65 +2230,46 @@ function triggerFormat() {
     if (monacoEditor) monacoEditor.getAction('editor.action.formatDocument').run();
 }
 
-// Кнопки тулбара
-document.getElementById('editBtn')?.addEventListener('click', triggerEdit);
-document.getElementById('saveBtn')?.addEventListener('click', triggerSave);
-document.getElementById('formatBtn')?.addEventListener('click', triggerFormat);
+var editBtnEl = document.getElementById('editBtn');
+var saveBtnEl = document.getElementById('saveBtn');
+var formatBtnEl = document.getElementById('formatBtn');
+var wrapBtnEl = document.getElementById('toggleWordWrapBtn');
+var minimapBtnEl = document.getElementById('toggleMinimapBtn');
 
-document.getElementById('toggleWordWrapBtn')?.addEventListener('click', function() {
-    wordWrapEnabled = !wordWrapEnabled;
-    monacoEditor?.updateOptions({ wordWrap: wordWrapEnabled ? 'on' : 'off' });
-    this.style.opacity = wordWrapEnabled ? '1' : '0.5';
-});
-document.getElementById('toggleMinimapBtn')?.addEventListener('click', function() {
-    minimapEnabled = !minimapEnabled;
-    monacoEditor?.updateOptions({ minimap: { enabled: minimapEnabled } });
-    this.style.opacity = minimapEnabled ? '1' : '0.5';
-});
+if (editBtnEl)   editBtnEl.addEventListener('click', triggerEdit);
+if (saveBtnEl)   saveBtnEl.addEventListener('click', triggerSave);
+if (formatBtnEl) formatBtnEl.addEventListener('click', triggerFormat);
+if (wrapBtnEl) {
+    wrapBtnEl.addEventListener('click', function() {
+        wordWrapEnabled = !wordWrapEnabled;
+        if (monacoEditor) monacoEditor.updateOptions({ wordWrap: wordWrapEnabled ? 'on' : 'off' });
+        this.style.opacity = wordWrapEnabled ? '1' : '0.5';
+    });
+}
+if (minimapBtnEl) {
+    minimapBtnEl.addEventListener('click', function() {
+        minimapEnabled = !minimapEnabled;
+        if (monacoEditor) monacoEditor.updateOptions({ minimap: { enabled: minimapEnabled } });
+        this.style.opacity = minimapEnabled ? '1' : '0.5';
+    });
+}
 
-// ── Keyboard shortcuts ──
+// ════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ════════════════════════════════════════════
 document.addEventListener('keydown', function(e) {
-    // Ctrl+P — Command Palette
-    if (e.ctrlKey && e.key === 'p') {
-        e.preventDefault();
-        openCmdPalette();
-    }
-    // Ctrl+S — Save
-    if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        if (isEditMode) triggerSave();
-        else triggerEdit();
-    }
-    // Ctrl+E — Edit mode
-    if (e.ctrlKey && e.key === 'e') {
-        e.preventDefault();
-        triggerEdit();
-    }
-    // Escape — close palette / modal
-    if (e.key === 'Escape') {
-        closeCmdPalette();
-    }
-    // Shift+Alt+F — Format
-    if (e.shiftKey && e.altKey && e.key === 'F') {
-        e.preventDefault();
-        triggerFormat();
-    }
+    if (e.ctrlKey && e.key === 'p') { e.preventDefault(); openCmdPalette(); }
+    if (e.ctrlKey && e.key === 's') { e.preventDefault(); isEditMode ? triggerSave() : triggerEdit(); }
+    if (e.ctrlKey && e.key === 'e') { e.preventDefault(); triggerEdit(); }
+    if (e.key === 'Escape') { closeCmdPalette(); }
+    if (e.shiftKey && e.altKey && e.key === 'F') { e.preventDefault(); triggerFormat(); }
 });
 
-// ── Init ──
+// ════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', function() {
-    if (isTextFile) {
-        initMonaco(false); // read-only view by default
-    }
-});
-
-// ── Loader ──
-window.addEventListener('load', function() {
-    setTimeout(function() {
-        const overlay = document.getElementById('loaderOverlay');
-        overlay.classList.add('fade-out');
-        setTimeout(() => overlay.remove(), 400);
-    }, 700);
+    if (isTextFile) initMonaco(false);
 });
 </script>
 </body>
