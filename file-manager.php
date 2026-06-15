@@ -5,9 +5,9 @@ session_start();
 // ║               KOFFEE DEVELOPER — НАСТРОЙКИ                  ║
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Авторизация                                                 ║
-define('AUTH_ENABLED',  false);             // ← false = отключить авторизацию
+define('AUTH_ENABLED',  false);           // ← false = отключить авторизацию
 define('AUTH_LOGIN',    'Логин');           // ← логин
-define('AUTH_PASSWORD', 'Пароль');         // ← пароль
+define('AUTH_PASSWORD', 'Пароль');      // ← пароль
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Корневая директория (по умолчанию — папка файла)            ║
 define('BASE_DIR', __DIR__);
@@ -32,7 +32,7 @@ define('MAX_FILE_SIZE',    5  * 1024 * 1024); // 5 MB
 define('MAX_UPLOAD_SIZE',  10 * 1024 * 1024); // 10 MB
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Версия                                                      ║
-define('VERSION', '2.1');
+define('VERSION', '2.2');
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Текстовые расширения (редактируются в Monaco Editor)        ║
 define('TEXT_EXTENSIONS', array(
@@ -155,6 +155,36 @@ if (isset($_GET['action'])) {
     handleAction($absolutePath, $requestedPath);
 }
 
+// AJAX: список дочерних папок для блокнота
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'subdirs') {
+    header('Content-Type: application/json');
+    $relDir = isset($_GET['dir']) ? trim($_GET['dir'], '/') : '';
+    $absDir = realpath(BASE_DIR . ($relDir ? '/' . $relDir : ''));
+    $result = [];
+    if ($absDir && strpos($absDir, realpath(BASE_DIR)) === 0 && is_dir($absDir)) {
+        $items = @scandir($absDir);
+        if ($items) {
+            foreach ($items as $item) {
+                if ($item === '.' || $item === '..') continue;
+                $full = $absDir . '/' . $item;
+                if (is_dir($full)) {
+                    $childRel = ($relDir ? $relDir . '/' : '') . $item;
+                    // Check if has subdirs
+                    $hasSubs = false;
+                    $sub = @scandir($full);
+                    if ($sub) foreach ($sub as $s) {
+                        if ($s !== '.' && $s !== '..' && is_dir($full . '/' . $s)) { $hasSubs = true; break; }
+                    }
+                    $result[] = ['name' => $item, 'path' => $childRel, 'hasSubs' => $hasSubs];
+                }
+            }
+        }
+    }
+    echo json_encode($result);
+    exit;
+}
+
+
 // Обработка переименования
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rename'])) {
     $newName = trim($_POST['new_name']);
@@ -270,6 +300,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         handleFileUpload($absolutePath);
     } elseif (isset($_POST['new_folder'])) {
         createNewFolder($absolutePath);
+    } elseif (isset($_POST['notepad_save'])) {
+        // Notepad: save new file
+        $npFilename = basename(trim($_POST['notepad_filename'] ?? ''));
+        $npContent  = $_POST['notepad_content'] ?? '';
+        if (!empty($npFilename)) {
+            $npExt = strtolower(pathinfo($npFilename, PATHINFO_EXTENSION));
+            if (in_array($npExt, TEXT_EXTENSIONS)) {
+                $npPath = $absolutePath . '/' . $npFilename;
+                if (!file_exists($npPath)) {
+                    file_put_contents($npPath, $npContent);
+                    $_SESSION['message'] = 'Файл «' . htmlspecialchars($npFilename) . '» создан';
+                } else {
+                    // Overwrite existing
+                    file_put_contents($npPath, $npContent);
+                    $_SESSION['message'] = 'Файл «' . htmlspecialchars($npFilename) . '» сохранён';
+                }
+            }
+        }
+        header("Location: ?path=" . urlencode($requestedPath));
+        exit;
     } elseif (isset($_POST['new_file'])) {
         createNewFile($absolutePath);
     }
@@ -1266,6 +1316,238 @@ function displayFileContent($path) {
         #versionModal ul { padding-left: 16px; color: var(--vsc-fg); font-size: 13px; line-height: 2; }
         #versionModal p { color: var(--vsc-fg-dim); font-size: 12px; margin-top: 8px; }
 
+        /* ── BSOD ── */
+        #bsodScreen {
+            display: none;
+            position: fixed; inset: 0;
+            background: #0078D7;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            z-index: 99999;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 10vh 12vw;
+            animation: bsodFadeIn 0.3s ease;
+            overflow: hidden;
+        }
+        #bsodScreen.show { display: flex; }
+        @keyframes bsodFadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+        .bsod-emoji {
+            font-size: clamp(60px, 10vw, 120px);
+            margin-bottom: 28px;
+            line-height: 1;
+        }
+        .bsod-title {
+            font-size: clamp(18px, 3vw, 36px);
+            font-weight: 400;
+            margin-bottom: 32px;
+            line-height: 1.4;
+            max-width: 700px;
+        }
+        .bsod-desc {
+            font-size: clamp(12px, 1.5vw, 16px);
+            line-height: 1.8;
+            max-width: 640px;
+            margin-bottom: 36px;
+            opacity: 0.9;
+        }
+        .bsod-progress-wrap {
+            margin-bottom: 32px;
+        }
+        .bsod-progress-label {
+            font-size: clamp(12px, 1.5vw, 16px);
+            margin-bottom: 10px;
+        }
+        .bsod-progress-bar {
+            width: 280px;
+            height: 6px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bsod-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #fff;
+            border-radius: 3px;
+            transition: width 0.08s linear;
+        }
+        .bsod-qr-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 24px;
+            margin-top: 10px;
+        }
+        .bsod-qr {
+            width: 80px; height: 80px;
+            background: #fff;
+            display: flex; align-items: center; justify-content: center;
+            padding: 6px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .bsod-qr svg { width: 68px; height: 68px; }
+        .bsod-qr-text {
+            font-size: clamp(11px, 1.3vw, 14px);
+            line-height: 1.8;
+            max-width: 440px;
+            opacity: 0.9;
+        }
+        .bsod-stop-code {
+            margin-top: 40px;
+            font-size: clamp(11px, 1.3vw, 14px);
+            opacity: 0.7;
+        }
+        /* small close hint */
+        .bsod-close-hint {
+            position: absolute;
+            bottom: 20px;
+            right: 28px;
+            font-size: 11px;
+            opacity: 0.4;
+            cursor: pointer;
+            user-select: none;
+        }
+        .bsod-close-hint:hover { opacity: 0.7; }
+
+        /* ── Notepad Modal ── */
+        #notepadModal .modal-content {
+            width: 760px;
+            max-width: 98vw;
+            height: 80vh;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #notepadModal .modal-body {
+            flex: 1;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .notepad-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            background: #2d2d2d;
+            border-bottom: 1px solid var(--vsc-border);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .notepad-lang-select {
+            background: #3c3c3c;
+            border: 1px solid var(--vsc-border-light);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
+            padding: 3px 8px;
+            height: 26px;
+            outline: none;
+            cursor: pointer;
+        }
+        .notepad-lang-select:focus { border-color: var(--vsc-accent); }
+        #notepadContainer {
+            flex: 1;
+            width: 100%;
+            overflow: hidden;
+        }
+        .notepad-save-section {
+            padding: 10px 14px;
+            background: #2d2d2d;
+            border-top: 1px solid var(--vsc-border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .notepad-filename-input {
+            background: #3c3c3c;
+            border: 1px solid var(--vsc-border-light);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 13px;
+            padding: 5px 10px;
+            height: 30px;
+            outline: none;
+            flex: 1;
+            min-width: 140px;
+        }
+        .notepad-filename-input:focus { border-color: var(--vsc-accent); }
+        .notepad-folder-select {
+            background: #3c3c3c;
+            border: 1px solid var(--vsc-border-light);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
+            padding: 3px 8px;
+            height: 30px;
+            outline: none;
+            cursor: pointer;
+            max-width: 200px;
+        }
+        .notepad-folder-select:focus { border-color: var(--vsc-accent); }
+        .notepad-save-label {
+            font-size: 12px;
+            color: var(--vsc-fg-dim);
+            white-space: nowrap;
+        }
+
+        /* ── Folder Tree Picker ── */
+        .ftree-item {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            cursor: pointer;
+            user-select: none;
+            border-radius: 3px;
+            transition: background 0.1s;
+        }
+        .ftree-item:hover { background: var(--vsc-hover); }
+        .ftree-item.selected { background: var(--vsc-selected); }
+        .ftree-item.selected .ftree-name { color: #fff; }
+        .ftree-toggle {
+            width: 20px; height: 24px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--vsc-fg-dim);
+            font-size: 10px;
+            flex-shrink: 0;
+            transition: transform 0.15s;
+        }
+        .ftree-toggle.open { transform: rotate(90deg); }
+        .ftree-toggle.leaf { opacity: 0; pointer-events: none; }
+        .ftree-icon {
+            font-size: 13px;
+            color: var(--vsc-folder);
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+        .ftree-name {
+            font-size: 13px;
+            color: var(--vsc-fg);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ftree-children {
+            display: none;
+        }
+        .ftree-children.open { display: block; }
+        .ftree-loading {
+            padding: 4px 0 4px 20px;
+            font-size: 12px;
+            color: var(--vsc-fg-dim);
+            font-style: italic;
+        }
+
+
     </style>
 </head>
 <body>
@@ -1289,8 +1571,8 @@ function displayFileContent($path) {
         <i class="fas fa-file-medical"></i>
     </button>
     <div class="activity-bar-bottom">
-        <button class="activity-btn" title="Обновить" onclick="window.location.reload()">
-            <i class="fas fa-sync-alt"></i>
+        <button class="activity-btn" title="Блокнот" onclick="openNotepad()">
+            <i class="fas fa-sticky-note"></i>
         </button>
         <button class="activity-btn" title="О программе" onclick="showModal('versionModal')">
             <i class="fas fa-info-circle"></i>
@@ -1306,7 +1588,7 @@ function displayFileContent($path) {
     <!-- Title bar -->
     <div class="mac-title-bar">
         <div class="mac-buttons">
-            <div class="mac-btn mac-btn-close"></div>
+            <div class="mac-btn mac-btn-close" onclick="tryBsod()" style="cursor:pointer;" title="Закрыть"></div>
             <div class="mac-btn mac-btn-min"></div>
             <div class="mac-btn mac-btn-max"></div>
         </div>
@@ -1797,6 +2079,109 @@ function displayFileContent($path) {
 </div>
 
 <!-- ═══════ MODAL: Version ═══════ -->
+<style>
+/* ── Version modal overrides ── */
+#versionModal .modal-content {
+    width: 460px;
+    max-width: 96vw;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+}
+#versionModal .modal-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 14px 16px 0;
+    gap: 0;
+}
+.cl-info-block {
+    flex-shrink: 0;
+    padding-bottom: 12px;
+}
+.cl-label {
+    font-size: 12px;
+    color: var(--vsc-fg-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+}
+/* Текущая версия — всегда раскрыта */
+.cl-entry {
+    background: #1e1e1e;
+    border-radius: 4px;
+    border-left: 2px solid var(--vsc-accent);
+    overflow: hidden;
+    flex-shrink: 0;
+    margin-bottom: 4px;
+}
+.cl-entry.old {
+    border-left-color: #444;
+}
+.cl-entry-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    cursor: default;
+    user-select: none;
+}
+.cl-entry.old .cl-entry-head {
+    cursor: pointer;
+}
+.cl-entry.old .cl-entry-head:hover {
+    background: rgba(255,255,255,0.03);
+}
+.cl-entry-ver {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    min-width: 36px;
+}
+.cl-entry.old .cl-entry-ver { color: #888; }
+.cl-entry-date {
+    font-size: 11px;
+    color: var(--vsc-fg-dim);
+    margin-left: auto;
+}
+.cl-entry-chevron {
+    font-size: 10px;
+    color: #555;
+    transition: transform 0.18s;
+    flex-shrink: 0;
+}
+.cl-entry.open .cl-entry-chevron { transform: rotate(90deg); }
+.cl-entry-body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.22s ease;
+}
+.cl-entry.current .cl-entry-body {
+    max-height: 600px; /* always open */
+}
+.cl-entry.open .cl-entry-body {
+    max-height: 600px;
+}
+.cl-entry-body ul {
+    padding: 0 12px 10px 26px;
+    margin: 0;
+    color: var(--vsc-fg);
+    font-size: 12px;
+    line-height: 1.9;
+}
+.cl-entry.old .cl-entry-body ul { color: #777; }
+
+/* Scrollable history */
+.cl-history {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding-bottom: 2px;
+    margin-bottom: 10px;
+}
+.cl-history::-webkit-scrollbar { width: 5px; }
+.cl-history::-webkit-scrollbar-thumb { background: #454545; border-radius: 3px; }
+</style>
 <div class="modal" id="versionModal">
     <div class="modal-content">
         <div class="modal-header">
@@ -1804,54 +2189,182 @@ function displayFileContent($path) {
             <button class="modal-close" onclick="hideModal('versionModal')">&times;</button>
         </div>
         <div class="modal-body">
-            <!-- Changelog -->
-            <div style="font-size:12px;color:var(--vsc-fg-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Changelog</div>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-                <div style="background:#1e1e1e;border-radius:4px;padding:10px 12px;border-left:2px solid var(--vsc-accent);">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                        <span style="font-size:13px;font-weight:600;color:#fff;">v2.1</span>
-                        <span style="font-size:11px;color:var(--vsc-fg-dim);">11.06.2025</span>
+
+            <!-- Info block (fixed top) -->
+            <div class="cl-info-block">
+                <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                    <div style="font-size:13px;color:var(--vsc-fg);display:flex;flex-direction:column;gap:4px;">
+                        <div><span style="color:var(--vsc-fg-dim);width:72px;display:inline-block;">Автор:</span> <span style="color:var(--vsc-accent);font-weight:600;">INK</span></div>
+                        <div><span style="color:var(--vsc-fg-dim);width:72px;display:inline-block;">Команда:</span> <span style="color:#ccc;">KOFFEE TEAM</span></div>
+                        <div><span style="color:var(--vsc-fg-dim);width:72px;display:inline-block;">Версия:</span> <span style="color:#ccc;"><?= VERSION ?></span></div>
+                        <div><span style="color:var(--vsc-fg-dim);width:72px;display:inline-block;">Сборка:</span> <span style="color:#ccc;">16.06.2025</span></div>
                     </div>
-                    <ul style="padding-left:14px;color:var(--vsc-fg);font-size:12px;line-height:1.9;margin:0;">
-                        <li>Авторизация с логином и паролем</li>
-                        <li>Возможность отключить авторизацию</li>
-                        <li>Мульти-вкладки файлов (localStorage)</li>
-                        <li>Кнопки копирования прямой ссылки</li>
-                        <li>Расширенная поддержка языков (Lua, Python, C++, SQL и др.)</li>
-                        <li>Исправлена кнопка проводника</li>
-                        <li>Убран эффект загрузки</li>
+                </div>
+                <div style="margin-top:10px;padding:8px 10px;background:rgba(0,122,204,0.07);border:1px solid rgba(0,122,204,0.18);border-radius:4px;font-size:11px;color:#666;line-height:1.7;">
+                    <i class="fas fa-info-circle" style="color:var(--vsc-accent);margin-right:5px;"></i>
+                    При модификации просьба указать автора — <strong style="color:#999;">INK / KOFFEE TEAM</strong>
+                </div>
+            </div>
+
+            <!-- Divider + label -->
+            <div style="border-top:1px solid var(--vsc-border);padding-top:12px;margin-bottom:8px;" class="cl-label">Changelog</div>
+
+            <!-- Current version — always expanded -->
+            <div class="cl-entry current" style="margin-bottom:6px;flex-shrink:0;">
+                <div class="cl-entry-head">
+                    <span class="cl-entry-ver">v2.2</span>
+                    <span style="font-size:11px;background:rgba(0,122,204,0.2);color:var(--vsc-accent);padding:1px 7px;border-radius:10px;font-weight:600;">latest</span>
+                    <span class="cl-entry-date">16.06.2025</span>
+                </div>
+                <div class="cl-entry-body">
+                    <ul>
+                        <li>BSOD экран при закрытии вкладки root (крестик в tab bar)</li>
+                        <li>BSOD при нажатии на красную кнопку title bar в root</li>
+                        <li>Реалистичный прогресс-бар и анимация перезагрузки в BSOD</li>
+                        <li>Блокнот с Monaco Editor (кнопка в Activity Bar)</li>
+                        <li>Выбор языка в блокноте + автоопределение по расширению</li>
+                        <li>Сохранение файла из блокнота на сервер</li>
+                        <li>Дерево папок для выбора места сохранения (с ленивой подгрузкой)</li>
+                        <li>AJAX-эндпоинт для получения вложенных папок</li>
                     </ul>
                 </div>
-                <div style="background:#1e1e1e;border-radius:4px;padding:10px 12px;border-left:2px solid #555;">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                        <span style="font-size:13px;font-weight:600;color:#999;">v2.0</span>
-                        <span style="font-size:11px;color:var(--vsc-fg-dim);">ранее</span>
-                    </div>
-                    <ul style="padding-left:14px;color:#777;font-size:12px;line-height:1.9;margin:0;">
-                        <li>Редизайн интерфейса в стиле VS Code</li>
-                        <li>Activity Bar, Tab Bar, Status Bar</li>
-                        <li>Command Palette (Ctrl+P)</li>
-                        <li>Monaco Editor с подсветкой синтаксиса</li>
-                        <li>Цветные иконки файлов по типу</li>
-                    </ul>
-                </div>
             </div>
-            <!-- Info -->
-            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--vsc-border);">
-                <div style="font-size:13px;color:var(--vsc-fg);display:flex;flex-direction:column;gap:5px;">
-                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Автор:</span> <span style="color:var(--vsc-accent);font-weight:600;">INK</span></div>
-                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Команда:</span> <span style="color:#ccc;">KOFFEE TEAM</span></div>
-                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Версия:</span> <span style="color:#ccc;"><?= VERSION ?></span></div>
-                    <div><span style="color:var(--vsc-fg-dim);width:80px;display:inline-block;">Сборка:</span> <span style="color:#ccc;">11.06.2025</span></div>
-                </div>
-            </div>
-            <div style="margin-top:12px;padding:9px 12px;background:rgba(0,122,204,0.08);border:1px solid rgba(0,122,204,0.2);border-radius:4px;font-size:11px;color:#777;line-height:1.7;">
-                <i class="fas fa-info-circle" style="color:var(--vsc-accent);margin-right:6px;"></i>
-                При модификации данного ПО просьба указать автора оригинального — <strong style="color:#bbb;">INK / KOFFEE TEAM</strong>
-            </div>
+
+
+
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="hideModal('versionModal')">Закрыть</button>
+        </div>
+    </div>
+</div>
+<script>
+function toggleCl(entry) {
+    entry.classList.toggle('open');
+}
+</script>
+
+<!-- ═══════ BSOD SCREEN ═══════ -->
+<div id="bsodScreen">
+    <div class="bsod-emoji">:(</div>
+    <div class="bsod-title">На вашем устройстве возникла проблема, и его<br>нужно перезагрузить.</div>
+    <div class="bsod-desc">
+        Мы просто собираем сведения об ошибке, а затем выполним<br>
+        перезапуск. (<span id="bsodPct">0</span>% готово)
+    </div>
+    <div class="bsod-progress-wrap">
+        <div class="bsod-progress-bar">
+            <div class="bsod-progress-fill" id="bsodFill"></div>
+        </div>
+    </div>
+    <div class="bsod-qr-row">
+        <div class="bsod-qr">
+            <!-- Simple QR-like pattern SVG -->
+            <svg viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg" fill="#000">
+                <rect x="0" y="0" width="28" height="28" rx="2"/>
+                <rect x="4" y="4" width="20" height="20" rx="1" fill="#0078D7"/>
+                <rect x="8" y="8" width="12" height="12" rx="1"/>
+                <rect x="40" y="0" width="28" height="28" rx="2"/>
+                <rect x="44" y="4" width="20" height="20" rx="1" fill="#0078D7"/>
+                <rect x="48" y="8" width="12" height="12" rx="1"/>
+                <rect x="0" y="40" width="28" height="28" rx="2"/>
+                <rect x="4" y="44" width="20" height="20" rx="1" fill="#0078D7"/>
+                <rect x="8" y="48" width="12" height="12" rx="1"/>
+                <rect x="40" y="40" width="4" height="4"/><rect x="48" y="40" width="4" height="4"/>
+                <rect x="56" y="40" width="4" height="4"/><rect x="64" y="40" width="4" height="4"/>
+                <rect x="40" y="48" width="4" height="4"/><rect x="48" y="52" width="4" height="4"/>
+                <rect x="56" y="48" width="4" height="4"/><rect x="60" y="56" width="4" height="4"/>
+                <rect x="40" y="56" width="4" height="4"/><rect x="48" y="60" width="4" height="4"/>
+                <rect x="56" y="60" width="4" height="4"/><rect x="64" y="56" width="4" height="4"/>
+            </svg>
+        </div>
+        <div class="bsod-qr-text">
+            Дополнительные сведения об этой проблеме и возможных исправлениях<br>
+            можно найти по ссылке: <u>https://www.windows.com/stopcode</u><br><br>
+            Если вы обращаетесь в службу поддержки, сообщите им<br>
+            следующую информацию:
+        </div>
+    </div>
+    <div class="bsod-stop-code">
+        Код остановки: KOFFEE_FILE_MANAGER_CRITICAL_ERROR
+    </div>
+    <div class="bsod-close-hint" onclick="hideBsod()">[ Нажмите здесь для возврата ]</div>
+</div>
+
+<!-- ═══════ NOTEPAD MODAL ═══════ -->
+<div class="modal" id="notepadModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-sticky-note" style="margin-right:8px;color:#f1c40f"></i>Блокнот</div>
+            <button class="modal-close" onclick="closeNotepad()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="notepad-toolbar">
+                <span style="font-size:12px;color:var(--vsc-fg-dim);">Язык:</span>
+                <select class="notepad-lang-select" id="notepadLang" onchange="changeNotepadLang()">
+                    <option value="plaintext">Plain Text</option>
+                    <option value="php">PHP</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="typescript">TypeScript</option>
+                    <option value="html">HTML</option>
+                    <option value="css">CSS</option>
+                    <option value="json">JSON</option>
+                    <option value="lua">Lua</option>
+                    <option value="python">Python</option>
+                    <option value="shell">Shell/Bash</option>
+                    <option value="sql">SQL</option>
+                    <option value="markdown">Markdown</option>
+                    <option value="xml">XML</option>
+                    <option value="yaml">YAML</option>
+                    <option value="ini">INI / Config</option>
+                    <option value="csharp">C#</option>
+                    <option value="cpp">C++</option>
+                    <option value="java">Java</option>
+                    <option value="go">Go</option>
+                    <option value="rust">Rust</option>
+                </select>
+                <div class="toolbar-sep"></div>
+                <button class="toolbar-btn" onclick="notepadFormat()" title="Форматировать (Shift+Alt+F)">
+                    <i class="fas fa-magic"></i> Форматировать
+                </button>
+                <button class="toolbar-btn" onclick="notepadClear()" title="Очистить редактор">
+                    <i class="fas fa-trash"></i> Очистить
+                </button>
+                <span style="margin-left:auto;font-size:11px;color:var(--vsc-fg-dim);" id="notepadCursor">Ln 1, Col 1</span>
+            </div>
+            <div id="notepadContainer"></div>
+            <div class="notepad-save-section">
+                <span class="notepad-save-label"><i class="fas fa-save"></i> Сохранить как:</span>
+                <input type="text" class="notepad-filename-input" id="notepadFilename" placeholder="имя_файла.php">
+                <span class="notepad-save-label">в папку:</span>
+                <button class="toolbar-btn" onclick="openFolderPicker()" id="notepadFolderBtn" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    <i class="fas fa-folder"></i> <span id="notepadFolderLabel">/ (корень)</span>
+                </button>
+                <input type="hidden" id="notepadFolderValue" value="">
+                <button class="btn btn-primary" onclick="notepadSave()" style="height:30px;padding:0 14px;">
+                    <i class="fas fa-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════ FOLDER PICKER MODAL ═══════ -->
+<div class="modal" id="folderPickerModal">
+    <div class="modal-content" style="width:420px;max-width:96vw;max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-folder-open" style="margin-right:8px;color:#dcb67a"></i>Выбрать папку</div>
+            <button class="modal-close" onclick="hideModal('folderPickerModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:0;flex:1;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--vsc-border);font-size:12px;color:var(--vsc-fg-dim);">
+                Выбрано: <span id="pickerCurrentPath" style="color:#fff;font-weight:600;">/ (корень)</span>
+            </div>
+            <div id="folderTree" style="flex:1;overflow-y:auto;padding:6px 0;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="hideModal('folderPickerModal')">Отмена</button>
+            <button class="btn btn-primary" onclick="confirmFolderPick()"><i class="fas fa-check"></i> Выбрать</button>
         </div>
     </div>
 </div>
@@ -2026,6 +2539,11 @@ function addCurrentTab() {
 
 function closeTab(e, path) {
     e.stopPropagation();
+    // If closing the root tab (empty path = root) — show BSOD
+    if ((path === '' || path === '/') && (currentPath === '' || currentPath === '/')) {
+        showBsod();
+        return;
+    }
     var tabs = loadTabs();
     tabs = tabs.filter(function(t) { return t.path !== path; });
     saveTabs(tabs);
@@ -2255,8 +2773,276 @@ if (minimapBtnEl) {
 }
 
 // ════════════════════════════════════════════
-//  KEYBOARD SHORTCUTS
+//  BSOD
 // ════════════════════════════════════════════
+var isRootPath = (currentPath === '' || currentPath === '/');
+
+function tryBsod() {
+    if (isRootPath) {
+        showBsod();
+    } else {
+        // Not root — just navigate up or do nothing (like a close)
+        window.location.href = '?path=';
+    }
+}
+
+function showBsod() {
+    var screen = document.getElementById('bsodScreen');
+    screen.classList.add('show');
+    var fill = document.getElementById('bsodFill');
+    var pct = document.getElementById('bsodPct');
+    var progress = 0;
+    fill.style.width = '0%';
+    pct.textContent = '0';
+    var interval = setInterval(function() {
+        // Simulate realistic Windows progress: fast then slow
+        var step = progress < 60 ? 1.2 : (progress < 85 ? 0.5 : 0.15);
+        progress = Math.min(progress + step, 100);
+        fill.style.width = progress.toFixed(1) + '%';
+        pct.textContent = Math.floor(progress);
+        if (progress >= 100) {
+            clearInterval(interval);
+            // After 2s "restart" — reload page
+            setTimeout(function() {
+                window.location.reload();
+            }, 2000);
+        }
+    }, 80);
+}
+
+function hideBsod() {
+    var screen = document.getElementById('bsodScreen');
+    screen.classList.remove('show');
+}
+
+// ════════════════════════════════════════════
+//  NOTEPAD (Monaco-based)
+// ════════════════════════════════════════════
+var notepadEditor = null;
+var notepadInited = false;
+
+function openNotepad() {
+    showModal('notepadModal');
+    if (!notepadInited) {
+        initNotepadEditor();
+        notepadInited = true;
+    } else if (notepadEditor) {
+        setTimeout(function() { notepadEditor.layout(); }, 50);
+    }
+}
+
+function closeNotepad() {
+    hideModal('notepadModal');
+}
+
+function initNotepadEditor() {
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+    require(['vs/editor/editor.main'], function() {
+        notepadEditor = monaco.editor.create(document.getElementById('notepadContainer'), {
+            value: '',
+            language: 'plaintext',
+            theme: 'vs-dark',
+            automaticLayout: true,
+            readOnly: false,
+            minimap: { enabled: false },
+            fontSize: 14,
+            fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace",
+            fontLigatures: true,
+            lineHeight: 22,
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            bracketPairColorization: { enabled: true },
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            padding: { top: 10 },
+            quickSuggestions: true
+        });
+        notepadEditor.onDidChangeCursorPosition(function(e) {
+            var el = document.getElementById('notepadCursor');
+            if (el) el.textContent = 'Ln ' + e.position.lineNumber + ', Col ' + e.position.column;
+        });
+        // Auto-detect extension from filename input
+        document.getElementById('notepadFilename').addEventListener('input', function() {
+            var fn = this.value;
+            var ext = fn.split('.').pop().toLowerCase();
+            var extLangMap = {
+                'php':'php','js':'javascript','jsx':'javascript','ts':'typescript','tsx':'typescript',
+                'html':'html','htm':'html','css':'css','json':'json','xml':'xml','svg':'xml',
+                'lua':'lua','py':'python','rb':'ruby','sh':'shell','bash':'shell',
+                'bat':'bat','ps1':'powershell','c':'c','h':'c','cpp':'cpp','hpp':'cpp',
+                'cs':'csharp','java':'java','kt':'kotlin','go':'go','rs':'rust',
+                'sql':'sql','yaml':'yaml','yml':'yaml','toml':'ini','ini':'ini',
+                'cfg':'ini','conf':'ini','env':'ini','md':'markdown','txt':'plaintext','log':'plaintext'
+            };
+            if (extLangMap[ext]) {
+                var sel = document.getElementById('notepadLang');
+                sel.value = extLangMap[ext] || 'plaintext';
+                monaco.editor.setModelLanguage(notepadEditor.getModel(), extLangMap[ext] || 'plaintext');
+            }
+        });
+    });
+}
+
+function changeNotepadLang() {
+    if (!notepadEditor) return;
+    var lang = document.getElementById('notepadLang').value;
+    monaco.editor.setModelLanguage(notepadEditor.getModel(), lang);
+}
+
+function notepadFormat() {
+    if (notepadEditor) notepadEditor.getAction('editor.action.formatDocument').run();
+}
+
+function notepadClear() {
+    if (notepadEditor && confirm('Очистить редактор?')) {
+        notepadEditor.setValue('');
+    }
+}
+
+function notepadSave() {
+    if (!notepadEditor) { showNotification('Редактор ещё не загружен', 'error'); return; }
+    var filename = document.getElementById('notepadFilename').value.trim();
+    if (!filename) { showNotification('Введите имя файла', 'error'); return; }
+    var folder = document.getElementById('notepadFolderValue').value;
+    var content = notepadEditor.getValue();
+
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '?path=' + encodeURIComponent(folder);
+    form.style.display = 'none';
+
+    var inp1 = document.createElement('input');
+    inp1.type = 'hidden'; inp1.name = 'notepad_save'; inp1.value = '1';
+    var inp2 = document.createElement('input');
+    inp2.type = 'hidden'; inp2.name = 'notepad_filename'; inp2.value = filename;
+    var inp3 = document.createElement('input');
+    inp3.type = 'hidden'; inp3.name = 'notepad_content'; inp3.value = content;
+
+    form.appendChild(inp1); form.appendChild(inp2); form.appendChild(inp3);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// ════════════════════════════════════════════
+//  FOLDER TREE PICKER
+// ════════════════════════════════════════════
+var pickerSelectedPath = '';
+
+function openFolderPicker() {
+    pickerSelectedPath = document.getElementById('notepadFolderValue').value || '';
+    buildFolderTree('', document.getElementById('folderTree'), 0);
+    updatePickerDisplay();
+    showModal('folderPickerModal');
+}
+
+function confirmFolderPick() {
+    document.getElementById('notepadFolderValue').value = pickerSelectedPath;
+    var label = pickerSelectedPath ? '/' + pickerSelectedPath : '/ (корень)';
+    document.getElementById('notepadFolderLabel').textContent = label;
+    hideModal('folderPickerModal');
+}
+
+function updatePickerDisplay() {
+    var label = pickerSelectedPath ? '/' + pickerSelectedPath : '/ (корень)';
+    document.getElementById('pickerCurrentPath').textContent = label;
+}
+
+function buildFolderTree(dirPath, container, depth) {
+    // Add root item if top level
+    if (depth === 0) {
+        container.innerHTML = '';
+        var rootItem = createFtreeItem('', '/ (корень)', true, false, 0);
+        container.appendChild(rootItem.row);
+        var rootChildren = document.createElement('div');
+        rootChildren.className = 'ftree-children open';
+        rootChildren.style.paddingLeft = '16px';
+        container.appendChild(rootChildren);
+        // fetch root subdirs
+        fetchSubdirs('', rootChildren, 1);
+    }
+}
+
+function fetchSubdirs(dirPath, container, depth) {
+    container.innerHTML = '<div class="ftree-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>';
+    fetch('?' + new URLSearchParams({ ajax: 'subdirs', dir: dirPath }))
+        .then(function(r) { return r.json(); })
+        .then(function(items) {
+            container.innerHTML = '';
+            if (items.length === 0) {
+                container.innerHTML = '<div class="ftree-loading">Нет подпапок</div>';
+                return;
+            }
+            items.forEach(function(item) {
+                var row = createFtreeItem(item.path, item.name, item.hasSubs, item.hasSubs, depth);
+                container.appendChild(row.row);
+                if (item.hasSubs) {
+                    var childrenDiv = document.createElement('div');
+                    childrenDiv.className = 'ftree-children';
+                    childrenDiv.style.paddingLeft = '16px';
+                    container.appendChild(childrenDiv);
+                    row.toggle.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        var isOpen = childrenDiv.classList.contains('open');
+                        if (!isOpen) {
+                            childrenDiv.classList.add('open');
+                            row.toggle.classList.add('open');
+                            row.icon.className = 'ftree-icon fas fa-folder-open';
+                            if (!childrenDiv._loaded) {
+                                childrenDiv._loaded = true;
+                                fetchSubdirs(item.path, childrenDiv, depth + 1);
+                            }
+                        } else {
+                            childrenDiv.classList.remove('open');
+                            row.toggle.classList.remove('open');
+                            row.icon.className = 'ftree-icon fas fa-folder';
+                        }
+                    });
+                }
+            });
+        })
+        .catch(function() {
+            container.innerHTML = '<div class="ftree-loading">Ошибка загрузки</div>';
+        });
+}
+
+function createFtreeItem(path, label, hasSubs, hasToggle, depth) {
+    var row = document.createElement('div');
+    row.className = 'ftree-item' + (path === pickerSelectedPath ? ' selected' : '');
+    row.style.paddingLeft = (8 + depth * 4) + 'px';
+    row.style.paddingRight = '8px';
+    row.style.minHeight = '26px';
+
+    var toggle = document.createElement('span');
+    toggle.className = 'ftree-toggle' + (hasToggle ? '' : ' leaf');
+    toggle.innerHTML = '<i class="fas fa-chevron-right"></i>';
+
+    var icon = document.createElement('span');
+    icon.className = 'ftree-icon fas fa-folder';
+
+    var name = document.createElement('span');
+    name.className = 'ftree-name';
+    name.textContent = label;
+
+    row.appendChild(toggle);
+    row.appendChild(icon);
+    row.appendChild(name);
+
+    // Select on click (not toggle)
+    row.addEventListener('click', function(e) {
+        if (e.target.closest('.ftree-toggle') && hasToggle) return;
+        // Deselect previous
+        var prev = document.querySelector('.ftree-item.selected');
+        if (prev) prev.classList.remove('selected');
+        row.classList.add('selected');
+        pickerSelectedPath = path;
+        updatePickerDisplay();
+    });
+
+    return { row: row, toggle: toggle, icon: icon };
+}
+
+
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 'p') { e.preventDefault(); openCmdPalette(); }
     if (e.ctrlKey && e.key === 's') { e.preventDefault(); isEditMode ? triggerSave() : triggerEdit(); }
