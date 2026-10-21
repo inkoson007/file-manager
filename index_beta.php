@@ -34,7 +34,7 @@ define('MAX_UPLOAD_SIZE',  10 * 1024 * 1024); // 10 MB
 // ║  Версия                                                      ║
 define('VERSION', '3.3.1');
 define('BUILD_CHANNEL', 'beta');
-define('BETA_REVISION', '1');
+define('BETA_REVISION', '2');
 define('VERSION_LABEL', VERSION . (BUILD_CHANNEL === 'beta' ? ' beta ' . BETA_REVISION : ''));
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Текстовые расширения (редактируются в Monaco Editor)        ║
@@ -268,7 +268,7 @@ if ($kdAuthEnabled) {
 }
 $isLoggedIn = true;
 
-// ── KOFFEE DEVELOPER 3.2: multi-user access, beta channel, AI and modules ──
+// ── KOFFEE DEVELOPER 3.3.1 beta 3: settings modal hotfix ──
 if (empty($_SESSION['kd_csrf'])) {
     try { $_SESSION['kd_csrf'] = bin2hex(random_bytes(32)); }
     catch (Throwable $e) { $_SESSION['kd_csrf'] = hash('sha256', uniqid('', true) . mt_rand()); }
@@ -874,6 +874,27 @@ if (isset($_GET['ajax']) && strpos((string)$_GET['ajax'], 'user_') === 0) {
     kdJsonResponse(array('ok'=>false,'error'=>'Неизвестное действие пользователей.'), 400);
 }
 
+function kdBackupUploadReplacement($path, $relativePath) {
+    if (!is_file($path) || is_link($path)) return false;
+    if (!is_dir(TRASH_DIR) && !@mkdir(TRASH_DIR, 0755, true)) return false;
+    $base = date('YmdHis') . '_before_replace_' . basename($path);
+    $name = $base; $n = 1;
+    while (file_exists(TRASH_DIR . DIRECTORY_SEPARATOR . $name)) {
+        $name = date('YmdHis') . '_before_replace_' . $n . '_' . basename($path); $n++;
+        if ($n > 10000) return false;
+    }
+    $backup = TRASH_DIR . DIRECTORY_SEPARATOR . $name;
+    if (!@copy($path, $backup)) return false;
+    $metaFile = TRASH_DIR . DIRECTORY_SEPARATOR . '.meta.json';
+    $meta = is_file($metaFile) ? (json_decode((string)@file_get_contents($metaFile), true) ?: array()) : array();
+    $meta[$name] = array('origName'=>basename($path), 'origPath'=>(string)$relativePath, 'deleted'=>date('Y-m-d H:i:s'), 'note'=>'Резервная копия перед заменой при загрузке');
+    if (@file_put_contents($metaFile, json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX) === false) {
+        @unlink($backup); return false;
+    }
+    kdLog('upload_replace_backup', (string)$relativePath, 'Старая версия сохранена в корзине: ' . $name);
+    return true;
+}
+
 // Multi-file / folder upload. Relative paths are sent separately by the browser; uploads are chunked to fit PHP 7.1 limits.
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'upload_batch') {
     $uploadData = kdGetRequestData();
@@ -885,6 +906,32 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'upload_batch') {
     $files = $_FILES['upload_files']; $paths = isset($_POST['upload_paths']) && is_array($_POST['upload_paths']) ? $_POST['upload_paths'] : array();
     $count = count($files['name']);
     if ($count > 12) kdJsonResponse(array('ok'=>false,'error'=>'В одном пакете допускается максимум 12 файлов.'),400);
+    $conflictActions = isset($_POST['upload_conflict_actions']) && is_array($_POST['upload_conflict_actions']) ? $_POST['upload_conflict_actions'] : array();
+    // First pass: identify all existing-file collisions before saving any item from this batch.
+    $pendingConflicts = array();
+    for ($i = 0; $i < $count; $i++) {
+        if ((int)($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+        $relProbe = str_replace('\\', '/', (string)($paths[$i] ?? ($files['name'][$i] ?? '')));
+        if ($relProbe === '' || strpos($relProbe, "\0") !== false || strpos($relProbe, '/') === 0 || preg_match('~(^|/)\\.\\.(?:/|$)~', $relProbe) || preg_match('/^[A-Za-z]:/', $relProbe)) continue;
+        $probeParts = explode('/', $relProbe); $probeSafe = true;
+        foreach ($probeParts as $part) {
+            if ($part === '' || $part === '.' || $part === '..' || strpos($part, "\0") !== false || preg_match('/[<>:"|?*]/', $part) || $part === '.kd_private' || $part === '.kd_trash' || strpos($part, '.kd_') === 0) { $probeSafe = false; break; }
+        }
+        if (!$probeSafe || !$probeParts) continue;
+        $probeExt = strtolower(pathinfo(end($probeParts), PATHINFO_EXTENSION));
+        if (!in_array($probeExt, ALLOWED_EXTENSIONS, true)) continue;
+        $candidate = $targetBase . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $probeParts);
+        if (file_exists($candidate) && is_file($candidate) && !is_link($candidate)) {
+            $choice = isset($conflictActions[$i]) ? (string)$conflictActions[$i] : '';
+            if (!in_array($choice, array('replace', 'rename'), true)) {
+                $probeLeaf = end($probeParts); $probeStem = pathinfo($probeLeaf, PATHINFO_FILENAME); $probeExtension = pathinfo($probeLeaf, PATHINFO_EXTENSION); $nextSuffix = 1;
+                do { $numbered = $probeStem . ' (' . $nextSuffix . ')' . ($probeExtension !== '' ? '.' . $probeExtension : ''); $numberedPath = dirname($candidate) . DIRECTORY_SEPARATOR . $numbered; $nextSuffix++; } while ((file_exists($numberedPath) || is_link($numberedPath)) && $nextSuffix < 10000);
+                $pendingConflicts[] = array('index'=>$i, 'path'=>$relProbe, 'name'=>basename($candidate), 'size'=>filesize($candidate), 'modified'=>date('d.m.Y H:i:s', filemtime($candidate)), 'next_suffix'=>max(1, $nextSuffix - 1));
+            }
+        }
+    }
+    if ($pendingConflicts) kdJsonResponse(array('ok'=>true, 'need_conflicts'=>true, 'conflicts'=>$pendingConflicts, 'message'=>'Есть файлы с таким же именем. Выберите действие для каждого из них.'));
+
     $okFiles = array(); $errors = array(); $total = 0;
     for ($i=0; $i<$count; $i++) {
         $name = (string)($files['name'][$i] ?? ''); $tmp = (string)($files['tmp_name'][$i] ?? ''); $err = (int)($files['error'][$i] ?? UPLOAD_ERR_NO_FILE); $size = (int)($files['size'][$i] ?? 0);
@@ -911,13 +958,24 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'upload_batch') {
         }
         if (!$good) { $errors[] = $rel . ': не удалось создать папку'; continue; }
         $destPath = $destDir . DIRECTORY_SEPARATOR . $leaf;
-        if (file_exists($destPath)) {
-            $stem = pathinfo($leaf, PATHINFO_FILENAME); $extension = pathinfo($leaf, PATHINFO_EXTENSION); $suffix = 1;
-            do { $newLeaf = $stem . ' (' . $suffix . ')' . ($extension !== '' ? '.' . $extension : ''); $destPath = $destDir . DIRECTORY_SEPARATOR . $newLeaf; $suffix++; } while (file_exists($destPath) && $suffix < 10000);
+        $choice = isset($conflictActions[$i]) ? (string)$conflictActions[$i] : '';
+        if (file_exists($destPath) || is_link($destPath)) {
+            if (is_link($destPath) || !is_file($destPath)) { $errors[] = $rel . ': путь уже занят папкой или ссылкой; заменять такой объект нельзя'; continue; }
+            if ($choice === 'rename') {
+                $stem = pathinfo($leaf, PATHINFO_FILENAME); $extension = pathinfo($leaf, PATHINFO_EXTENSION); $suffix = 1;
+                do { $newLeaf = $stem . ' (' . $suffix . ')' . ($extension !== '' ? '.' . $extension : ''); $destPath = $destDir . DIRECTORY_SEPARATOR . $newLeaf; $suffix++; } while ((file_exists($destPath) || is_link($destPath)) && $suffix < 10000);
+                if (file_exists($destPath) || is_link($destPath)) { $errors[] = $rel . ': не удалось подобрать свободное имя'; continue; }
+            } elseif ($choice === 'replace') {
+                $relativeForBackup = implode('/', $safeParts);
+                if (!kdBackupUploadReplacement($destPath, $relativeForBackup)) { $errors[] = $rel . ': не удалось сохранить старую версию в корзину; файл не заменён'; continue; }
+            } else {
+                $errors[] = $rel . ': обнаружен конфликт имени. Повторите загрузку и выберите действие.'; continue;
+            }
         }
         if (!@move_uploaded_file($tmp, $destPath)) { $errors[] = $rel . ': не удалось сохранить файл'; continue; }
         $savedRel = ltrim(str_replace(str_replace('\\','/',BASE_DIR) . '/', '', str_replace('\\','/',$destPath)), '/');
-        kdLog('upload', $savedRel, 'Загрузка пакетами'); $okFiles[] = $savedRel;
+        kdLog('upload', $savedRel, $choice === 'replace' ? 'Загрузка с заменой (старый файл сохранён в корзине)' : ($choice === 'rename' ? 'Загрузка как новый файл с суффиксом' : 'Загрузка пакетами'));
+        $okFiles[] = $savedRel;
     }
     kdJsonResponse(array('ok'=>count($okFiles)>0 || !$errors,'uploaded'=>$okFiles,'errors'=>$errors,'count'=>count($okFiles),'message'=>'Загружено файлов: '.count($okFiles).(count($errors) ? '; ошибок: '.count($errors) : '')));
 }
@@ -3132,6 +3190,15 @@ function displayFileContent($path) {
         .kd-upload-dropzone.dragover{border-color:var(--vsc-accent);background:var(--vsc-selected)}
         .kd-upload-queue-info{margin:10px 0 5px;font-size:12px;color:var(--vsc-fg-dim)}.kd-upload-queue-list{max-height:150px;overflow:auto;display:flex;flex-direction:column;gap:4px}
         .kd-upload-queue-item{padding:6px 9px;border:1px solid var(--vsc-border);border-radius:4px;display:flex;gap:8px;justify-content:space-between;overflow-wrap:anywhere;font-size:11px}.kd-upload-queue-item span:last-child{color:var(--vsc-fg-dim);white-space:nowrap}
+        .kd-upload-conflict-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--vsc-border)}
+        .kd-upload-conflict-file{min-width:0;flex:1;overflow-wrap:anywhere;font-size:12px}.kd-upload-conflict-file small{display:block;color:var(--vsc-fg-dim);margin-top:4px}
+        .kd-upload-conflict-choice{max-width:205px;min-width:165px;background:var(--vsc-sidebar);color:var(--vsc-fg);border:1px solid var(--vsc-border-light);border-radius:5px;padding:8px;font-size:12px}
+        #kdCircleCursor{position:fixed;left:0;top:0;width:24px;height:24px;box-sizing:border-box;border:2px solid var(--vsc-accent);border-radius:50%;pointer-events:none;z-index:50000;opacity:0;transform:translate3d(-100px,-100px,0);background:rgba(0,122,204,.04);box-shadow:0 0 6px rgba(0,122,204,.22);transition:width .12s ease,height .12s ease,background .12s ease,border-color .12s ease;will-change:transform}
+        body.kd-circle-cursor-enabled #kdCircleCursor{opacity:1}
+        body.kd-circle-cursor-enabled,body.kd-circle-cursor-enabled *{cursor:none!important}
+        #kdCircleCursor.kd-cursor-hover{width:34px;height:34px;background:rgba(0,122,204,.16)}
+        @media (pointer:coarse){#kdCircleCursor{display:none!important}body.kd-circle-cursor-enabled,body.kd-circle-cursor-enabled *{cursor:auto!important}}
+        body.kd-smooth-scroll-enabled .monaco-editor,body.kd-smooth-scroll-enabled .monaco-editor *{scroll-behavior:auto!important}
         #kdDvdOverlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.93);overflow:hidden;cursor:none}
         #kdDvdLogo{position:absolute;left:0;top:0;width:150px;height:70px;display:flex;align-items:center;justify-content:center;font-weight:900;letter-spacing:4px;font-size:30px;border:4px solid currentColor;border-radius:18px;filter:drop-shadow(0 0 18px currentColor);user-select:none}
         #kdDvdHint{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#888;font:12px Segoe UI,Arial,sans-serif}
@@ -4638,6 +4705,18 @@ function displayFileContent($path) {
     </div>
 </div>
 
+<!-- ═══════ MODAL: UPLOAD NAME CONFLICTS ═══════ -->
+<div class="modal" id="kdUploadConflictModal">
+    <div class="modal-content" style="width:560px;max-width:96vw;max-height:82vh;display:flex;flex-direction:column;">
+        <div class="modal-header"><div class="modal-title"><i class="fas fa-copy" style="margin-right:8px;color:var(--vsc-accent)"></i>Файлы с таким именем уже существуют</div><button class="modal-close" type="button" onclick="kdCancelUploadConflictChoices()">&times;</button></div>
+        <div class="modal-body" style="flex:1;overflow-y:auto;">
+            <p style="margin:0 0 12px;color:var(--vsc-fg-dim);">Для каждого конфликта выберите: заменить файл (старая версия будет сохранена в корзине) или создать новый файл с номером в названии.</p>
+            <div id="kdUploadConflictsList" class="kd-upload-conflicts-list"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="kdCancelUploadConflictChoices()">Отмена</button><button type="button" class="btn btn-primary" id="kdUploadConflictConfirmBtn" onclick="kdConfirmUploadConflictChoices()">Продолжить загрузку</button></div>
+    </div>
+</div>
+
 <!-- ═══════ MODAL: New Folder ═══════ -->
 <div class="modal" id="newFolderModal">
     <div class="modal-content">
@@ -4835,7 +4914,7 @@ function displayFileContent($path) {
             <!-- Current version — always expanded -->
             <div class="cl-entry current" style="margin-bottom:6px;flex-shrink:0;">
                 <div class="cl-entry-head">
-                    <span class="cl-entry-ver">v3.3.1 beta 1</span>
+                    <span class="cl-entry-ver">v3.3.1 beta 2</span>
                     <span style="font-size:11px;background:rgba(0,122,204,0.2);color:var(--vsc-accent);padding:1px 7px;border-radius:10px;font-weight:600;">latest</span>
                     <span class="cl-entry-date">22.10.2026</span>
                 </div>
@@ -4846,6 +4925,9 @@ function displayFileContent($path) {
                         <li>Отсчёт до Нового года сделан отдельной необязательной опцией: при включении он заменяет только блок часов/даты, а при выключении возвращаются выбранные обычные часы.</li>
                         <li>Отсчёт больше не заменяет приветствие на заставке: «Доброе утро», «Добрый день», «Добрый вечер» и «Доброй ночи» остаются над часами.</li>
                         <li>После обновления прежняя настройка обратного отсчёта однократно сбрасывается в выключенное состояние, чтобы восстановить стандартное отображение времени и даты.</li>
+                        <li>При загрузке файла с существующим именем теперь можно выбрать замену (старая версия сохраняется в корзине) или создание нового файла с суффиксом (1), (2) и далее.</li>
+                        <li>В «Настройки → Эффекты» добавлен круглый пользовательский курсор.</li>
+                        <li>Добавлена необязательная очень плавная прокрутка с небольшой задержкой для списков и панелей; редактор кода не перехватывает прокрутку.</li>
                     </ul>
                 </div>
             </div>
@@ -5045,6 +5127,17 @@ function toggleCl(entry) {
                         <option value="blizzard">Метель</option>
                         <option value="auto">Авто (случайная погода)</option>
                     </select>
+                </div>
+            </div>
+            <div class="settings-group">
+                <div class="settings-group-label">Курсор и прокрутка</div>
+                <div class="settings-row">
+                    <div class="settings-row-label">Круглый курсор<small>Заменить системный указатель аккуратным круглым индикатором</small></div>
+                    <label class="kd-switch"><input type="checkbox" id="settingCircleCursorEnabled" onchange="applySettings(true)"><span class="kd-switch-slider"></span></label>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">Плавная прокрутка<small>Медленное, мягкое движение с небольшой задержкой при прокрутке списков и панелей</small></div>
+                    <label class="kd-switch"><input type="checkbox" id="settingSmoothScrollEnabled" onchange="applySettings(true)"><span class="kd-switch-slider"></span></label>
                 </div>
             </div>
             <div class="settings-group kd-ai-settings">
@@ -5577,9 +5670,14 @@ function showModal(id) {
     var el = document.getElementById(id);
     if (!el) return;
     if (id === 'settingsModal' && typeof kdInitSettingsCategories === 'function') {
-        kdInitSettingsCategories();
-        kdSwitchSettingsCategory(kdCurrentSettingsCategory || 'general');
-        if (typeof syncSettingsUI === 'function') syncSettingsUI();
+        // Never let a settings-sync exception prevent the actual modal from opening.
+        try {
+            kdInitSettingsCategories();
+            kdSwitchSettingsCategory(kdCurrentSettingsCategory || 'general');
+            if (typeof syncSettingsUI === 'function') syncSettingsUI();
+        } catch (err) {
+            if (window.console && console.error) console.error('[KOFFEE] Не удалось синхронизировать настройки:', err);
+        }
     }
     el.classList.add('show');
     el.style.display = 'flex';
@@ -5897,7 +5995,8 @@ function renderConstructorCodeView() {
             constructorCodeEditor = monaco.editor.create(document.getElementById('constructorCodeEditor'), {
                 value: '', language: 'html', theme: monacoThemeFor(kdSettings.themeMode),
                 readOnly: true, automaticLayout: true, minimap: { enabled: false },
-                fontSize: 13, scrollBeyondLastLine: false, wordWrap: 'on', padding: { top: 10 }
+                fontSize: 13, scrollBeyondLastLine: false, wordWrap: 'on', padding: { top: 10 },
+                smoothScrolling: !!(window.kdSettings && kdSettings.smoothScrollEnabled)
             });
             updateConstructorCodeEditorContent();
         });
@@ -6233,7 +6332,8 @@ function renderElementDetailEditor() {
             elementDetailEditor = monaco.editor.create(document.getElementById('elementDetailEditor'), {
                 value: '', language: 'html', theme: monacoThemeFor(kdSettings.themeMode),
                 readOnly: true, automaticLayout: true, minimap: { enabled: false },
-                fontSize: 13, scrollBeyondLastLine: false, wordWrap: 'on', padding: { top: 10 }
+                fontSize: 13, scrollBeyondLastLine: false, wordWrap: 'on', padding: { top: 10 },
+                smoothScrolling: !!(window.kdSettings && kdSettings.smoothScrollEnabled)
             });
             updateElementDetailEditorContent();
         });
@@ -6516,13 +6616,14 @@ function initMonaco(editMode) {
             wordWrap: 'on',
             bracketPairColorization: { enabled: true },
             guides: { bracketPairs: true, indentation: true },
-            smoothScrolling: true,
+            smoothScrolling: !!(window.kdSettings && kdSettings.smoothScrollEnabled),
             cursorBlinking: 'smooth',
             cursorSmoothCaretAnimation: 'on',
             padding: { top: 12 },
             suggest: { showKeywords: true },
             quickSuggestions: true
         });
+        kdUpdateMonacoSmoothOptions(!!kdSettings.smoothScrollEnabled);
         monacoEditor.onDidChangeCursorPosition(function(e) {
             var el = document.getElementById('statusCursor');
             if (el) el.textContent = 'Ln ' + e.position.lineNumber + ', Col ' + e.position.column;
@@ -6668,12 +6769,13 @@ function initNotepadEditor() {
             scrollBeyondLastLine: false,
             wordWrap: 'on',
             bracketPairColorization: { enabled: true },
-            smoothScrolling: true,
+            smoothScrolling: !!(window.kdSettings && kdSettings.smoothScrollEnabled),
             cursorBlinking: 'smooth',
             cursorSmoothCaretAnimation: 'on',
             padding: { top: 10 },
             quickSuggestions: true
         });
+        kdUpdateMonacoSmoothOptions(!!kdSettings.smoothScrollEnabled);
         notepadEditor.onDidChangeModelContent(function() {
             notepadTabs[notepadActive].content = notepadEditor.getValue();
         });
@@ -6878,6 +6980,8 @@ var kdSettings = {
     screensaverTimeout: 30,
     snowEnabled:   false,
     snowIntensity: 'normal',
+    circleCursorEnabled: false,
+    smoothScrollEnabled: false,
     autoUpdateCheck: true,
     checkBetaUpdates: <?= (defined('BUILD_CHANNEL') && BUILD_CHANNEL === 'beta') ? 'true' : 'false' ?>,
     uiLanguage: 'ru',
@@ -6901,6 +7005,8 @@ function loadSettings() {
         kdSettings.screensaverTimeout = parseInt(s.screensaverTimeout) || 30;
         kdSettings.snowEnabled   = !!s.snowEnabled;
         kdSettings.snowIntensity = s.snowIntensity || 'normal';
+        kdSettings.circleCursorEnabled = s.circleCursorEnabled === true;
+        kdSettings.smoothScrollEnabled = s.smoothScrollEnabled === true;
         kdSettings.autoUpdateCheck = s.autoUpdateCheck !== false;
         kdSettings.checkBetaUpdates = typeof s.checkBetaUpdates === 'boolean' ? s.checkBetaUpdates : OTA_IS_BETA;
         kdSettings.uiLanguage = s.uiLanguage === 'en' ? 'en' : 'ru';
@@ -6923,7 +7029,7 @@ var kdCurrentSettingsCategory = 'general';
 function kdInitSettingsCategories() {
     var modal = document.getElementById('settingsModal');
     if (!modal || modal.getAttribute('data-category-ready') === '1') return;
-    var map = {'Внешний вид':'general','Заголовок окна':'general','Проводник':'general','Заставка':'effects','Снежинки':'effects','ИИ-модели и API':'ai','Обновления':'updates','Пользователи панели':'users'};
+    var map = {'Внешний вид':'general','Заголовок окна':'general','Проводник':'general','Заставка':'effects','Снежинки':'effects','Курсор и прокрутка':'effects','ИИ-модели и API':'ai','Обновления':'updates','Пользователи панели':'users'};
     Array.prototype.forEach.call(modal.querySelectorAll('.settings-group'), function(group) {
         if (group.getAttribute('data-setting-category')) return;
         var label = group.querySelector('.settings-group-label');
@@ -7065,6 +7171,8 @@ function applySettings(fromUI) {
         var ssTEl = document.getElementById('settingScreensaverTimeout');
         var snEl  = document.getElementById('settingSnowEnabled');
         var snIEl = document.getElementById('settingSnowIntensity');
+        var circleCursorEl = document.getElementById('settingCircleCursorEnabled');
+        var smoothScrollEl = document.getElementById('settingSmoothScrollEnabled');
         var auEl  = document.getElementById('settingAutoUpdateCheck');
         var betaEl = document.getElementById('settingCheckBetaUpdates');
         var nyEl = document.getElementById('settingNewYearCountdown');
@@ -7077,6 +7185,8 @@ function applySettings(fromUI) {
         if (ssTEl) kdSettings.screensaverTimeout = parseInt(ssTEl.value) || 30;
         if (snEl) kdSettings.snowEnabled    = snEl.checked;
         if (snIEl) kdSettings.snowIntensity = snIEl.value;
+        if (circleCursorEl) kdSettings.circleCursorEnabled = circleCursorEl.checked;
+        if (smoothScrollEl) kdSettings.smoothScrollEnabled = smoothScrollEl.checked;
         if (auEl) kdSettings.autoUpdateCheck = auEl.checked;
         if (betaEl) { kdSettings.checkBetaUpdates = betaEl.checked; var betaManualBtnOnChange = document.getElementById('manualCheckBetaUpdateBtn'); if (betaManualBtnOnChange) betaManualBtnOnChange.style.display = betaEl.checked ? '' : 'none'; }
         if (nyEl) kdSettings.newYearCountdown = nyEl.checked;
@@ -7144,6 +7254,10 @@ function applySettings(fromUI) {
         stopSnow();
     }
 
+    // Optional cursor and smooth wheel-scroll effects.
+    kdApplyCircleCursor();
+    kdApplySmoothScroll();
+
     // Meta visibility
     document.documentElement.style.setProperty('--meta-opacity-hover', kdSettings.showMeta ? '1' : '0');
 
@@ -7162,6 +7276,10 @@ function syncSettingsUI() {
     var ssTEl = document.getElementById('settingScreensaverTimeout');
     var snEl  = document.getElementById('settingSnowEnabled');
     var snIEl = document.getElementById('settingSnowIntensity');
+    // These controls belong to syncSettingsUI too; without local declarations
+    // the first Settings click throws ReferenceError and the modal never opens.
+    var circleCursorEl = document.getElementById('settingCircleCursorEnabled');
+    var smoothScrollEl = document.getElementById('settingSmoothScrollEnabled');
     var auEl  = document.getElementById('settingAutoUpdateCheck');
     var betaEl = document.getElementById('settingCheckBetaUpdates');
     var nyEl = document.getElementById('settingNewYearCountdown');
@@ -7174,6 +7292,8 @@ function syncSettingsUI() {
     if (ssTEl) ssTEl.value   = String(kdSettings.screensaverTimeout);
     if (snEl)  snEl.checked  = kdSettings.snowEnabled;
     if (snIEl) snIEl.value   = kdSettings.snowIntensity;
+    if (circleCursorEl) circleCursorEl.checked = !!kdSettings.circleCursorEnabled;
+    if (smoothScrollEl) smoothScrollEl.checked = !!kdSettings.smoothScrollEnabled;
     if (auEl)  auEl.checked  = kdSettings.autoUpdateCheck;
     if (betaEl) betaEl.checked = !!kdSettings.checkBetaUpdates;
     var betaManualBtn = document.getElementById('manualCheckBetaUpdateBtn'); if (betaManualBtn) betaManualBtn.style.display = kdSettings.checkBetaUpdates ? '' : 'none';
@@ -7188,6 +7308,168 @@ function syncSettingsUI() {
     if (ssToutRow) ssToutRow.style.display = kdSettings.screensaverEnabled ? '' : 'none';
     var snowRow = document.getElementById('snowIntensityRow');
     if (snowRow) snowRow.style.display = kdSettings.snowEnabled ? '' : 'none';
+}
+
+// ── Optional circular pointer ──
+var kdCircleCursorEl = null;
+function kdEnsureCircleCursor() {
+    if (kdCircleCursorEl && kdCircleCursorEl.isConnected) return kdCircleCursorEl;
+    kdCircleCursorEl = document.getElementById('kdCircleCursor');
+    if (!kdCircleCursorEl && document.body) {
+        kdCircleCursorEl = document.createElement('div');
+        kdCircleCursorEl.id = 'kdCircleCursor';
+        kdCircleCursorEl.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(kdCircleCursorEl);
+    }
+    return kdCircleCursorEl;
+}
+function kdApplyCircleCursor() {
+    var enabled = !!kdSettings.circleCursorEnabled;
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) enabled = false;
+    document.body.classList.toggle('kd-circle-cursor-enabled', enabled);
+    var ring = kdEnsureCircleCursor();
+    if (!ring) return;
+    if (!ring.getAttribute('data-kd-bound')) {
+        ring.setAttribute('data-kd-bound', '1');
+        document.addEventListener('mousemove', function(e) {
+            if (!kdCircleCursorEl || !document.body.classList.contains('kd-circle-cursor-enabled')) return;
+            kdCircleCursorEl.style.transform = 'translate3d(' + (e.clientX - kdCircleCursorEl.offsetWidth / 2) + 'px,' + (e.clientY - kdCircleCursorEl.offsetHeight / 2) + 'px,0)';
+        }, {passive:true});
+        document.addEventListener('mouseover', function(e) {
+            if (!kdCircleCursorEl) return;
+            var hit = e.target && e.target.closest ? e.target.closest('a,button,input,select,label,.file-item,.toolbar-btn,.activity-btn') : null;
+            kdCircleCursorEl.classList.toggle('kd-cursor-hover', !!hit);
+        }, true);
+    }
+}
+
+// ── Smooth wheel scrolling for page panes and Monaco code editors ──
+var kdSmoothScrollStates = [];
+var kdSmoothScrollListenerOn = false;
+var kdSmoothMonacoStates = [];
+function kdGetSmoothScrollState(el) {
+    for (var i = 0; i < kdSmoothScrollStates.length; i++) if (kdSmoothScrollStates[i].el === el) return kdSmoothScrollStates[i];
+    var state = {el:el, target:el.scrollTop, raf:0}; kdSmoothScrollStates.push(state); return state;
+}
+function kdKnownMonacoEditors() {
+    var list = [];
+    [
+        (typeof monacoEditor !== 'undefined' ? monacoEditor : null),
+        (typeof notepadEditor !== 'undefined' ? notepadEditor : null),
+        (typeof constructorCodeEditor !== 'undefined' ? constructorCodeEditor : null),
+        (typeof elementDetailEditor !== 'undefined' ? elementDetailEditor : null)
+    ].forEach(function(editor) { if (editor && typeof editor.getDomNode === 'function' && list.indexOf(editor) === -1) list.push(editor); });
+    return list;
+}
+function kdMonacoEditorAtTarget(target) {
+    var editors = kdKnownMonacoEditors();
+    for (var i = 0; i < editors.length; i++) {
+        try {
+            var node = editors[i].getDomNode();
+            if (node && (node === target || node.contains(target))) return editors[i];
+        } catch (ignore) {}
+    }
+    return null;
+}
+function kdUpdateMonacoSmoothOptions(enabled) {
+    kdKnownMonacoEditors().forEach(function(editor) {
+        try { editor.updateOptions({smoothScrolling: !!enabled}); } catch (ignore) {}
+    });
+}
+function kdGetMonacoSmoothState(editor) {
+    for (var i = 0; i < kdSmoothMonacoStates.length; i++) if (kdSmoothMonacoStates[i].editor === editor) return kdSmoothMonacoStates[i];
+    var state = {editor:editor, target:editor.getScrollTop(), raf:0};
+    kdSmoothMonacoStates.push(state);
+    return state;
+}
+function kdAnimateMonacoWheel(e, editor) {
+    if (!editor || !kdSettings.smoothScrollEnabled || e.ctrlKey || e.altKey || Math.abs(e.deltaY) < 0.1) return false;
+    // Monaco handles the mouse wheel internally, so ordinary DOM scrollTop animation
+    // does not affect its model viewport. Drive the editor through its public API.
+    e.preventDefault();
+    e.stopPropagation();
+    var scale = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? Math.max(120, window.innerHeight * 0.85) : 1);
+    var delta = e.deltaY * scale;
+    var state = kdGetMonacoSmoothState(editor);
+    var max = 0;
+    try { max = Math.max(0, editor.getScrollHeight() - editor.getLayoutInfo().height); } catch (ignore) {}
+    var currentTarget = state.raf ? state.target : editor.getScrollTop();
+    state.target = Math.max(0, Math.min(max, currentTarget + delta * 0.78));
+    if (state.raf) return true;
+    var step = function() {
+        try {
+            if (!state.editor || !state.editor.getDomNode() || !state.editor.getDomNode().isConnected) { state.raf = 0; return; }
+            var current = state.editor.getScrollTop();
+            var diff = state.target - current;
+            if (Math.abs(diff) < 0.6) {
+                state.editor.setScrollTop(state.target);
+                state.raf = 0;
+                return;
+            }
+            state.editor.setScrollTop(current + diff * 0.16);
+            state.raf = requestAnimationFrame(step);
+        } catch (ignore) { state.raf = 0; }
+    };
+    state.raf = requestAnimationFrame(step);
+    return true;
+}
+function kdIsExcludedSmoothTarget(target) {
+    return !!(target && target.closest && target.closest('input,textarea,select,[contenteditable="true"],.monaco-list,.monaco-tree'));
+}
+function kdFindSmoothScrollTarget(target, delta) {
+    var el = target && target.nodeType === 1 ? target : (target ? target.parentElement : null);
+    if (kdIsExcludedSmoothTarget(el)) return null;
+    while (el && el !== document.body && el !== document.documentElement) {
+        var style = window.getComputedStyle(el);
+        var scrollable = /(auto|scroll|overlay)/.test(style.overflowY || '') && el.scrollHeight > el.clientHeight + 2;
+        if (scrollable) {
+            var top = el.scrollTop <= 0, bottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+            if (!((delta > 0 && bottom) || (delta < 0 && top))) return el;
+        }
+        el = el.parentElement;
+    }
+    return null;
+}
+function kdSmoothWheelHandler(e) {
+    if (!kdSettings.smoothScrollEnabled || e.ctrlKey || e.altKey || Math.abs(e.deltaY) < 0.1) return;
+    var monacoTarget = kdMonacoEditorAtTarget(e.target);
+    if (monacoTarget) {
+        kdAnimateMonacoWheel(e, monacoTarget);
+        return;
+    }
+    if (kdIsExcludedSmoothTarget(e.target) || (e.target && e.target.closest && e.target.closest('#editor-container,.constructor-code-editor'))) return;
+    var scale = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? Math.max(120, window.innerHeight * 0.85) : 1);
+    var delta = e.deltaY * scale;
+    var el = kdFindSmoothScrollTarget(e.target, delta);
+    if (!el) return;
+    e.preventDefault();
+    var state = kdGetSmoothScrollState(el);
+    var max = Math.max(0, el.scrollHeight - el.clientHeight);
+    state.target = Math.max(0, Math.min(max, state.target + delta * 0.78));
+    if (state.raf) return;
+    var step = function() {
+        if (!state.el || !state.el.isConnected) { state.raf = 0; return; }
+        var current = state.el.scrollTop, diff = state.target - current;
+        if (Math.abs(diff) < 0.6) { state.el.scrollTop = state.target; state.raf = 0; return; }
+        state.el.scrollTop = current + diff * 0.14;
+        state.raf = requestAnimationFrame(step);
+    };
+    state.raf = requestAnimationFrame(step);
+}
+function kdApplySmoothScroll() {
+    var enabled = !!kdSettings.smoothScrollEnabled;
+    document.body.classList.toggle('kd-smooth-scroll-enabled', enabled);
+    kdUpdateMonacoSmoothOptions(enabled);
+    if (enabled && !kdSmoothScrollListenerOn) {
+        document.addEventListener('wheel', kdSmoothWheelHandler, {passive:false, capture:true});
+        kdSmoothScrollListenerOn = true;
+    } else if (!enabled && kdSmoothScrollListenerOn) {
+        document.removeEventListener('wheel', kdSmoothWheelHandler, true);
+        kdSmoothScrollListenerOn = false;
+        kdSmoothScrollStates.forEach(function(state) { if (state.raf) cancelAnimationFrame(state.raf); });
+        kdSmoothScrollStates = [];
+        kdSmoothMonacoStates.forEach(function(state) { if (state.raf) cancelAnimationFrame(state.raf); try { if (state.editor) state.target = state.editor.getScrollTop(); } catch (ignore) {} state.raf = 0; });
+    }
 }
 
 // Init settings on load
@@ -8525,19 +8807,78 @@ function kdReadDroppedEntry(entry, parent, out) {
 async function kdCollectDrop(dataTransfer){var out=[];var items=Array.prototype.slice.call(dataTransfer.items||[]);if(items.length&&items.some(function(it){return typeof it.webkitGetAsEntry==='function'&&it.webkitGetAsEntry();})){for(var i=0;i<items.length;i++){var entry=items[i].webkitGetAsEntry?items[i].webkitGetAsEntry():null;if(entry)await kdReadDroppedEntry(entry,'',out);else if(items[i].kind==='file'){var f=items[i].getAsFile();if(f)out.push({file:f,path:f.name});}}}else Array.prototype.forEach.call(dataTransfer.files||[],function(f){out.push({file:f,path:f.name});});
     out.forEach(function(item){item.path=item.path.replace(/\\/g,'/');item.key=item.path+'|'+item.file.size+'|'+item.file.lastModified;});kdUploadQueue=kdUploadQueue.concat(out.filter(function(item){return !kdUploadQueue.some(function(old){return old.key===item.key;});}));kdRenderUploadQueue();
 }
+var kdUploadConflictResolver = null;
+function kdAskUploadConflictActions(conflicts) {
+    var modal = document.getElementById('kdUploadConflictModal');
+    var list = document.getElementById('kdUploadConflictsList');
+    if (!modal || !list) return Promise.resolve(null);
+    list.innerHTML = '';
+    (conflicts || []).forEach(function(conflict) {
+        var row = document.createElement('div'); row.className = 'kd-upload-conflict-row';
+        var file = document.createElement('div'); file.className = 'kd-upload-conflict-file';
+        var name = document.createElement('strong'); name.textContent = conflict.path || conflict.name || 'Файл'; file.appendChild(name);
+        var meta = document.createElement('small');
+        meta.textContent = 'Уже существует' + (conflict.modified ? ' · изменён ' + conflict.modified : '') + (typeof conflict.size === 'number' ? ' · ' + (conflict.size / 1024).toFixed(1) + ' КБ' : '');
+        file.appendChild(meta);
+        var select = document.createElement('select'); select.className = 'kd-upload-conflict-choice'; select.setAttribute('data-upload-conflict-index', String(conflict.index));
+        var keep = document.createElement('option'); keep.value = 'rename'; keep.textContent = (window.KD_LANGUAGE === 'en' ? 'Create new file (' : 'Создать новый файл (') + (conflict.next_suffix || 1) + ')';
+        var replace = document.createElement('option'); replace.value = 'replace'; replace.textContent = window.KD_LANGUAGE === 'en' ? 'Replace existing' : 'Заменить существующий';
+        select.appendChild(keep); select.appendChild(replace); row.appendChild(file); row.appendChild(select); list.appendChild(row);
+    });
+    return new Promise(function(resolve) {
+        kdUploadConflictResolver = resolve;
+        showModal('kdUploadConflictModal');
+    });
+}
+function kdFinishUploadConflictChoices(choices) {
+    var resolver = kdUploadConflictResolver;
+    kdUploadConflictResolver = null;
+    hideModal('kdUploadConflictModal');
+    if (resolver) resolver(choices);
+}
+function kdConfirmUploadConflictChoices() {
+    var choices = {};
+    Array.prototype.forEach.call(document.querySelectorAll('#kdUploadConflictsList [data-upload-conflict-index]'), function(sel) {
+        choices[sel.getAttribute('data-upload-conflict-index')] = sel.value;
+    });
+    kdFinishUploadConflictChoices(choices);
+}
+function kdCancelUploadConflictChoices() { kdFinishUploadConflictChoices(null); }
+
 async function kdStartBatchUpload(event){
     if(event)event.preventDefault();if(!kdUploadQueue.length){showNotification('Сначала выберите или перетащите файлы/папки','error');return false;}
     var btn=document.getElementById('kdUploadStartBtn'),progress=document.getElementById('kdUploadProgress');if(btn)btn.disabled=true;if(progress){progress.style.display='block';progress.textContent='Подготовка загрузки…';}
-    var queue=kdUploadQueue.slice(),uploaded=0,errors=[];var currentPath=(new URLSearchParams(window.location.search).get('path')||'');
+    var queue=kdUploadQueue.slice(),uploaded=0,errors=[];var currentPath=(new URLSearchParams(window.location.search).get('path')||'');var totalQueued=queue.length;
     try{
-        while(queue.length){var batch=[],batchBytes=0;while(queue.length&&batch.length<10&&(batch.length===0||batchBytes+queue[0].file.size<45*1024*1024)){var item=queue.shift();batch.push(item);batchBytes+=item.file.size;}
-            var fd=new FormData();fd.append('csrf',window.KD_CSRF);batch.forEach(function(item){fd.append('upload_files[]',item.file,item.file.name);fd.append('upload_paths[]',item.path);});
-            var response=await fetch('?ajax=upload_batch&path='+encodeURIComponent(currentPath),{method:'POST',body:fd,credentials:'same-origin',headers:{'X-KD-CSRF':window.KD_CSRF}});var data=await response.json();if(!response.ok||(!data.ok&&!Array.isArray(data.errors)))throw new Error(data.error||('HTTP '+response.status));uploaded+=data.count||0;if(data.errors)errors=errors.concat(data.errors);if(progress)progress.textContent='Загружено '+uploaded+' из '+kdUploadQueue.length+' файлов…';
+        while(queue.length){
+            var batch=[],batchBytes=0;while(queue.length&&batch.length<10&&(batch.length===0||batchBytes+queue[0].file.size<45*1024*1024)){var item=queue.shift();batch.push(item);batchBytes+=item.file.size;}
+            var decisions=null, data=null;
+            while(true){
+                var fd=new FormData();fd.append('csrf',window.KD_CSRF);
+                batch.forEach(function(item){fd.append('upload_files[]',item.file,item.file.name);fd.append('upload_paths[]',item.path);});
+                if(decisions)Object.keys(decisions).forEach(function(index){fd.append('upload_conflict_actions['+index+']',decisions[index]);});
+                var response=await fetch('?ajax=upload_batch&path='+encodeURIComponent(currentPath),{method:'POST',body:fd,credentials:'same-origin',headers:{'X-KD-CSRF':window.KD_CSRF}});
+                data=await response.json();
+                if(!response.ok||(!data.ok&&!Array.isArray(data.errors)))throw new Error(data.error||('HTTP '+response.status));
+                if(data.need_conflicts){
+                    decisions=await kdAskUploadConflictActions(data.conflicts||[]);
+                    if(!decisions){kdUploadQueue=batch.concat(queue);kdRenderUploadQueue();throw new Error('UPLOAD_CANCELLED');}
+                    continue;
+                }
+                break;
+            }
+            uploaded+=data.count||0;if(data.errors)errors=errors.concat(data.errors);
+            var doneKeys=batch.map(function(item){return item.key;});
+            kdUploadQueue=kdUploadQueue.filter(function(item){return doneKeys.indexOf(item.key)===-1;});
+            if(progress)progress.textContent='Загружено '+uploaded+' из '+totalQueued+' файлов…';
         }
         if(errors.length)showNotification('Загружено '+uploaded+'; ошибок: '+errors.length,'error');else showNotification('Успешно загружено файлов: '+uploaded,'success');
         if(progress){progress.textContent=(errors.length?'Ошибки:\n'+errors.join('\n'):'Загрузка завершена. Файлов: '+uploaded);}
-        kdUploadQueue=[];kdRenderUploadQueue();if(!errors.length)setTimeout(function(){hideModal('uploadModal');window.location.reload();},900);
-    }catch(e){if(progress)progress.textContent='Ошибка: '+e.message;showNotification('Ошибка загрузки: '+e.message,'error');}
+        if(!errors.length){kdUploadQueue=[];kdRenderUploadQueue();setTimeout(function(){hideModal('uploadModal');window.location.reload();},900);}else{kdRenderUploadQueue();}
+    }catch(e){
+        if(e.message==='UPLOAD_CANCELLED'){if(progress)progress.textContent='Загрузка приостановлена. Выберите действия для дубликатов и продолжите загрузку.';}
+        else{if(progress)progress.textContent='Ошибка: '+e.message;showNotification('Ошибка загрузки: '+e.message,'error');}
+    }
     finally{if(btn)btn.disabled=false;}return false;
 }
 function uploadFiles(files) { kdQueueFiles(files,false); var m=document.getElementById('uploadModal'); if(m)showModal('uploadModal'); }
@@ -8568,7 +8909,7 @@ var kdAiBusy = false;
 var kdAiSelectedId = '';
 var kdLanguageObserver = null;
 var kdActiveTranslation = 'ru';
-var KD_TRANSLATIONS_EN = {"Проводник":"Explorer","Поиск":"Search","Загрузить файл":"Upload file","Создать папку":"Create folder","Создать файл":"Create file","Блокнот":"Notepad","Корзина":"Trash","Лог действий":"Activity log","Настройки":"Settings","О программе":"About","Выйти из аккаунта":"Sign out","Файловый менеджер":"File manager","Внешний вид":"Appearance","Тема оформления":"Theme","Тёмная, светлая или полностью чёрная":"Dark, light or pure black","Тёмная":"Dark","Светлая":"Light","Чёрная":"Black","Язык интерфейса":"Interface language","Перевод основных элементов файлового менеджера":"Translate core file-manager controls","Русский":"Russian","Заголовок окна":"Window title","Показывать часы":"Show clock","Заменяет название на часы с датой":"Replace the title with date and clock","Формат":"Format","Что показывать в часах":"Clock display","Только время":"Time only","Дата + Время":"Date + time","Показывать размер и дату":"Show size and date","При наведении на файл":"When hovering over a file","Заставка":"Screensaver","Включить заставку":"Enable screensaver","Часы/дата при бездействии":"Clock/date after inactivity","Показывать":"Display","Секунд до показа":"Seconds until display","Время бездействия (сек)":"Idle time (sec)","Снежинки":"Snowflakes","Включить снежинки":"Enable snowflakes","Падающий снег по всему экрану":"Falling snow across the screen","Интенсивность":"Intensity","Слабая":"Light","Средняя":"Medium","Сильная":"Heavy","Метель":"Blizzard","Авто (случайная погода)":"Auto (random weather)","Обновления":"Updates","Проверять обновления автоматически":"Check for updates automatically","Проверка версии при заходе и перезагрузке страницы":"Check version on entry and page reload","Закрыть":"Close","Сохранить":"Save","Отмена":"Cancel","Удалить":"Delete","Восстановить":"Restore","Скачать":"Download","Открыть":"Open","Создать модуль / шаблон":"Create module / template","Модули":"Modules","Чат ИИ":"AI chat","Все модули":"All modules","Установить ZIP":"Install ZIP","Установленные модули":"Installed modules","Как создать модуль":"How to create a module","Новая папка":"New folder","Новый файл":"New file","Корень":"Root","Поиск файлов...":"Search files...","Введите команду или имя файла...":"Enter a command or file name...","Скачать файл":"Download file","Загрузка":"Uploading","Подтвердить":"Confirm","Выход":"Sign out","Имя":"Name","Размер":"Size","Дата изменения":"Modified","Выберите файл":"Choose file","Выберите ZIP-файл":"Choose ZIP file","Переименовать":"Rename","В корзину":"Move to trash","Копировать":"Copy","Вырезать":"Cut","Вставить сюда":"Paste here","Скачать как ZIP":"Download as ZIP","Очистить буфер":"Clear clipboard","Очистить корзину":"Empty trash","Очистить лог":"Clear log","Выбрать папку":"Choose folder","Выбрано:":"Selected:","Форматировать":"Format","Очистить редактор":"Clear editor","Сохранить как:":"Save as:","в папку:":"to folder:","Скопировано в буфер":"Copied to clipboard","Папка":"Folder","Файл":"File","Название":"Name","Содержимое":"Content","Показать размер и дату":"Show size and date","Сохранить подключение":"Save connection","Проверить API":"Test API","Новое":"New","Удалить подключение":"Delete connection","Сохранённые подключения":"Saved connections","Новое подключение…":"New connection…","Название подключения":"Connection name","Провайдер":"Provider","Название модели API":"API model name","API-ключ":"API key","Base URL / URL API":"Base URL / API URL","Ответы и помощь с кодом":"Answers and coding help","Настройки API":"API settings","Передавать код открытого файла как контекст":"Include open file as context","Файл не открыт":"No file open","Чем помочь?":"How can I help?","Задайте вопрос обычным языком. Для задач с кодом можно передать открытый файл и применить предложенный результат в редакторе.":"Ask a question in natural language. For coding tasks, include the open file as context and apply the suggested result in the editor.","ИИ не сохраняет файлы сам: вставка кода требует явного нажатия, а сохранение — обычной кнопки «Сохранить».":"AI does not save files automatically. You must explicitly apply code, then use Save to write the file.","Напишите вопрос или задачу по коду… (Enter — отправить, Shift+Enter — новая строка)":"Ask a question or coding task… (Enter to send, Shift+Enter for a new line)","Отправить":"Send","Расширения файлового менеджера":"File manager extensions","Установить модуль из ZIP":"Install module from ZIP","Загрузите архив с manifest.json и PHP/JS/CSS-файлами модуля. Архив проверяется на небезопасные пути перед распаковкой.":"Upload an archive with manifest.json and the module PHP/JS/CSS files. Unsafe paths are checked before extraction.","Модули пока не установлены. Скачайте шаблон, изучите README.md, измените файлы и загрузите ZIP.":"No modules installed yet. Download the template, read README.md, edit the files, then upload the ZIP.","Нажмите «Создать модуль / шаблон» и скачайте ZIP-шаблон.":"Click Create module / template to download a ZIP template.","Ошибка загрузки:":"Load error:","Модуль":"Module","ID:":"ID:","Важно:":"Important:","Установка…":"Installing…","Модуль установлен, но в module.php не определён callback render.":"The module is installed, but module.php does not define a render callback.","Файл слишком большой для просмотра":"File is too large to preview","Тип файла не поддерживается для просмотра":"This file type cannot be previewed","Ссылка":"Link","Копировать путь":"Copy path","Переместить":"Move","Переименовать файл":"Rename file","Создать":"Create","Поиск по файлам":"Search files","Найти":"Find","Следующий":"Next","Предыдущий":"Previous","Назад":"Back","Вперёд":"Forward","Перезагрузить":"Reload","Проверить":"Check","Далее":"Next","Предпросмотр":"Preview","Редактировать":"Edit","Сохранить изменения":"Save changes","Не сохранено":"Unsaved","Изменения сохранены":"Changes saved","Требуется обновление страницы":"Page reload required","Последние ошибки подключения":"Recent connection errors","Ошибок пока нет.":"No errors yet.","API пока не проверялся.":"The API has not been tested yet.","Проверить PHP":"Check PHP","Статус сервера":"Server status","Пустая папка":"Empty folder","Файлов нет":"No files","Папки":"Folders","Файлы":"Files","Подключение":"Connection","Проверка":"Test","Сервер":"Server","Работает":"Working","Не работает":"Not working","KOFFEE DEVELOPER - Файловый менеджер":"KOFFEE DEVELOPER - File Manager","KOFFEE DEVELOPER — Файловый менеджер":"KOFFEE DEVELOPER — File Manager","ПРОВОДНИК":"EXPLORER","Распакуйте архив. В корне должны лежать":"Extract the archive. These files must be at its root","; переводы — в":"; translations go in","и":"and","Задайте в manifest уникальный":"Set a unique value in manifest for",", отображаемое":", a display",", версию и":", version, and","В":"In","реализуйте":"implement","для содержимого новой вкладки и":"for the new tab content and","для серверных методов. В JS вызывайте":"for server methods. In JS, call","Упакуйте содержимое папки в ZIP без лишней внешней папки и установите архив здесь. После установки страница перезагрузится и новая вкладка появится слева.":"Zip the folder contents without an extra parent folder, then install the archive here. The page reloads after installation and the new tab appears on the left.","Важно: PHP-код установленного модуля выполняется с правами веб-сервера. Не устанавливайте архивы от неизвестных авторов; проверьте код перед загрузкой.":"Important: installed module PHP runs with the web server permissions. Do not install ZIPs from unknown authors; review the code first.","Кликните на файл в проводнике, чтобы открыть его здесь":"Click a file in Explorer to open it here","Сохранить файл":"Save file","Форматировать документ":"Format document","Создать новый файл":"Create new file","Создать новую папку":"Create new folder","Обновить страницу":"Reload page","Новое имя":"New name","Макс. размер: 10MB. Разрешены: php, html, css, js, json, txt, md, jpg, png, gif, mp3, wav, ogg":"Max size: 10 MB. Allowed: php, html, css, js, json, txt, md, jpg, png, gif, mp3, wav, ogg","Загрузить":"Upload","Имя папки":"Folder name","Имя файла (с расширением)":"File name (with extension)","Поддерживаемые расширения: php, html, css, js, ts, json, xml, lua, py, rb, sh, c, cpp, cs, java, go, rs, sql, md, txt, yaml, ini и др.":"Supported extensions: php, html, css, js, ts, json, xml, lua, py, rb, sh, c, cpp, cs, java, go, rs, sql, md, txt, yaml, ini and more","Автор:":"Author:","Команда:":"Team:","Версия:":"Version:","Сборка:":"Build:","При модификации просьба указать автора —":"If modified, please credit the author —","Проверить обновления":"Check for updates","Полностью чёрная тема (OLED) — отдельная от светлой/тёмной, со своей темой для редактора кода":"Pure black (OLED) theme separate from dark/light, with its own code editor theme","Снежинки на экране: вкл/выкл, интенсивность слабая/средняя/сильная/метель/авто-погода, разлетаются и закручиваются вокруг курсора":"On-screen snow: toggle, choose intensity (light/medium/heavy/blizzard/auto); flakes swirl around the cursor","Новая заставка: приветствие по времени суток, анимированный фон, простые «флип»-часы в стиле часов из шапки окна, дата на русском":"New screensaver: greeting by time of day, animated background, flip clock and Russian date","Мобильное нижнее меню для быстрого переключения между разделами + кнопка сворачивания":"Mobile bottom menu for quick section switching, with a collapse button","Полноценный файловый менеджер на мобильных — рабочий проводник на весь экран, исправлен поиск, кнопки переименовать/удалить всегда видны":"Full-screen mobile file manager with working Explorer, search fixes, and visible rename/delete buttons","Окна подтверждения в стиле сайта вместо системных confirm() — для удаления, выхода, очистки лога и т.д.":"Styled confirmation dialogs instead of browser confirm() for deleting, signing out, clearing logs, and more","Прокрутка в окнах настроек и «О программе», чтобы кнопки всегда были видны":"Scrolling in Settings and About dialogs so buttons remain accessible","Режим «Конструктор» для PHP/HTML-файлов: живое превью страницы с переключением ПК/Планшет/Моб. и ручным изменением размера":"Designer mode for PHP/HTML files: live page preview with desktop/tablet/mobile presets and manual resizing","В Конструкторе — просмотр исходного HTML, CSS и JS страницы в редакторе с номерами строк":"Designer includes HTML, CSS and JS source editors with line numbers","Инспектор элементов: подсветка при наведении, список применяемых CSS-правил, окно с HTML/CSS/скриптами элемента по клику":"Element inspector: hover highlighting, applied CSS rules, and an HTML/CSS/script view for clicked elements","Приближение и отдаление изображений колёсиком мыши с перетаскиванием и кнопками управления":"Zoom images with the mouse wheel, drag them, or use the controls","Автоматическая проверка обновлений — уведомление о новой версии со списком изменений и ссылкой на GitHub":"Automatic update checks with release notes and a GitHub link","Исправления чёрной темы для окна «О программе», формы переименования и уведомлений":"Pure black theme fixes for About, Rename and notifications","Доступно обновление":"Update available","Вышла новая версия":"A new version is available","— у вас установлена v3.3.1":"— currently installed: v3.3.1","Что нового":"What’s new","Напомнить позже":"Remind me later","Обновить":"Update","Что отображать на заставке":"What to show on the screensaver","Только дата":"Date only","Количество снежинок":"Snowflake count","ИИ-модели и API":"AI models and API","Ключ отправляется только с сервера провайдеру и хранится вне публичной папки сайта, если права хостинга это позволяют. Для изменения сохранённого подключения оставьте ключ пустым, чтобы сохранить прежний.":"The key is sent to the provider only by the server and stored outside the public site folder when permissions allow. Leave the key blank to keep the saved key when editing a connection.","OpenAI-compatible (OpenRouter / DeepSeek / другой)":"OpenAI-compatible (OpenRouter / DeepSeek / other)","Конструктор —":"Designer —","ПК":"Desktop","Планшет":"Tablet","Моб.":"Mobile","Превью":"Preview","Инспектор элементов":"Element inspector","Выбранный элемент":"Selected element","Наведите курсор на элемент на странице":"Hover over an element on the page","Все классы на странице (":"All page classes (","Все ID на странице (":"All page IDs (","Элемент":"Element","Скрипты":"Scripts","Показать в коде":"Show in code","Подтверждение":"Confirmation","Лог":"Log","Сдвиньте мышь или нажмите клавишу":"Move the mouse or press a key","Просмотр":"View","На вашем устройстве возникла проблема, и его":"Your device ran into a problem and needs","нужно перезагрузить.":"to restart.","Мы просто собираем сведения об ошибке, а затем выполним":"We are collecting some error information, then","перезапуск. (":"we will restart. (","% готово)":"% complete)","Дополнительные сведения об этой проблеме и возможных исправлениях":"More information about this problem and possible fixes","можно найти по ссылке:":"can be found at:","Если вы обращаетесь в службу поддержки, сообщите им":"If you contact support, give them this","следующую информацию:":"information:","Код остановки: KOFFEE_FILE_MANAGER_CRITICAL_ERROR":"Stop code: KOFFEE_FILE_MANAGER_CRITICAL_ERROR","[ Нажмите здесь для возврата ]":"[ Click here to return ]","Без имени 1":"Untitled 1","Язык:":"Language:","Очистить":"Clear","/ (корень)":"/ (root)","Выбрать":"Select","Загрузка...":"Loading...","Основные":"General","Эффекты":"Effects","ИИ / API":"AI / API","Пользователи":"Users","Искать бета-версии":"Check for beta versions","Показывать отдельное окно, когда на beta_version.php доступна новая бета-сборка":"Show a separate dialog when a new beta build is available on beta_version.php","Пользователи панели":"Panel users","Создавайте отдельные учётные записи. Пароли хранятся в виде хеша в приватном каталоге. Администратор может просматривать журнал действий по логину.":"Create separate accounts. Passwords are stored as hashes in a private directory. Administrators can view the activity log by login.","Логин":"Login","Роль":"Role","Пароль":"Password","Можно короткий пароль; пусто — пароль не менять":"Short passwords are allowed; leave blank to keep the current password","Повтор пароля":"Confirm password","Сохранить пользователя":"Save user","Новый":"New","Обновить список":"Refresh list","Управление учётными записями.":"Account management.","Новая учётная запись. Пароль может быть коротким, но не пустым.":"New account. A short password is allowed, but it cannot be empty.","Загрузка…":"Loading…","Пользователей нет.":"No users.","Журнал пуст.":"Activity log is empty.","Администратор":"Administrator","Пользователь":"User","активен":"active","Изменить":"Edit","Удалить пользователя":"Delete user","Удалить":"Delete","Пользователь создан.":"User created.","Пользователь обновлён.":"User updated.","Пользователь удалён.":"User deleted.","Не удалось загрузить пользователей.":"Failed to load users.","Не удалось сохранить пользователя.":"Failed to save user.","Доступна новая бета-версия":"New beta version available","Новая бета-сборка:":"New beta build:","Бета-версии могут содержать экспериментальные функции. Перед обновлением создайте резервную копию.":"Beta versions may contain experimental features. Create a backup before updating.","Что нового в бета-версии":"What’s new in the beta","Обновить на бета-версию":"Update to beta","Позже":"Later","Первичная настройка":"Initial setup","Создать администратора":"Create administrator","Telegram KOFFEE DEVELOPER":"KOFFEE DEVELOPER on Telegram","Отсчёт до Нового года":"New Year countdown","Заменяет только блок часов сверху и дату/время на заставке. Приветствие и обычные настройки сохраняются.":"Replaces only the top clock and the date/time block on the screensaver. Greeting and regular settings are preserved.","До Нового года:":"Until New Year:","Загрузить файлы и папки":"Upload files and folders","Выбрать файлы":"Choose files","Выбрать папку":"Choose folder","Перетащите сюда файлы или папки":"Drop files or folders here","Загрузить выбранное":"Upload selected","Выключить":"Disable","Включить":"Enable","Заблокировать":"Block","Разблокировать":"Unblock","последний вход:":"last login:","Требовать смену пароля при следующем входе":"Require password change on next login","Авторизация панели":"Panel authentication","Пользователь заблокирован":"User blocked","Проверить бета-версию":"Check beta version"};
+var KD_TRANSLATIONS_EN = {"Проводник":"Explorer","Поиск":"Search","Загрузить файл":"Upload file","Создать папку":"Create folder","Создать файл":"Create file","Блокнот":"Notepad","Корзина":"Trash","Лог действий":"Activity log","Настройки":"Settings","О программе":"About","Выйти из аккаунта":"Sign out","Файловый менеджер":"File manager","Внешний вид":"Appearance","Тема оформления":"Theme","Тёмная, светлая или полностью чёрная":"Dark, light or pure black","Тёмная":"Dark","Светлая":"Light","Чёрная":"Black","Язык интерфейса":"Interface language","Перевод основных элементов файлового менеджера":"Translate core file-manager controls","Русский":"Russian","Заголовок окна":"Window title","Показывать часы":"Show clock","Заменяет название на часы с датой":"Replace the title with date and clock","Формат":"Format","Что показывать в часах":"Clock display","Только время":"Time only","Дата + Время":"Date + time","Показывать размер и дату":"Show size and date","При наведении на файл":"When hovering over a file","Заставка":"Screensaver","Включить заставку":"Enable screensaver","Часы/дата при бездействии":"Clock/date after inactivity","Показывать":"Display","Секунд до показа":"Seconds until display","Время бездействия (сек)":"Idle time (sec)","Снежинки":"Snowflakes","Включить снежинки":"Enable snowflakes","Падающий снег по всему экрану":"Falling snow across the screen","Интенсивность":"Intensity","Слабая":"Light","Средняя":"Medium","Сильная":"Heavy","Метель":"Blizzard","Авто (случайная погода)":"Auto (random weather)","Обновления":"Updates","Проверять обновления автоматически":"Check for updates automatically","Проверка версии при заходе и перезагрузке страницы":"Check version on entry and page reload","Закрыть":"Close","Сохранить":"Save","Отмена":"Cancel","Удалить":"Delete","Восстановить":"Restore","Скачать":"Download","Открыть":"Open","Создать модуль / шаблон":"Create module / template","Модули":"Modules","Чат ИИ":"AI chat","Все модули":"All modules","Установить ZIP":"Install ZIP","Установленные модули":"Installed modules","Как создать модуль":"How to create a module","Новая папка":"New folder","Новый файл":"New file","Корень":"Root","Поиск файлов...":"Search files...","Введите команду или имя файла...":"Enter a command or file name...","Скачать файл":"Download file","Загрузка":"Uploading","Подтвердить":"Confirm","Выход":"Sign out","Имя":"Name","Размер":"Size","Дата изменения":"Modified","Выберите файл":"Choose file","Выберите ZIP-файл":"Choose ZIP file","Переименовать":"Rename","В корзину":"Move to trash","Копировать":"Copy","Вырезать":"Cut","Вставить сюда":"Paste here","Скачать как ZIP":"Download as ZIP","Очистить буфер":"Clear clipboard","Очистить корзину":"Empty trash","Очистить лог":"Clear log","Выбрать папку":"Choose folder","Выбрано:":"Selected:","Форматировать":"Format","Очистить редактор":"Clear editor","Сохранить как:":"Save as:","в папку:":"to folder:","Скопировано в буфер":"Copied to clipboard","Папка":"Folder","Файл":"File","Название":"Name","Содержимое":"Content","Показать размер и дату":"Show size and date","Сохранить подключение":"Save connection","Проверить API":"Test API","Новое":"New","Удалить подключение":"Delete connection","Сохранённые подключения":"Saved connections","Новое подключение…":"New connection…","Название подключения":"Connection name","Провайдер":"Provider","Название модели API":"API model name","API-ключ":"API key","Base URL / URL API":"Base URL / API URL","Ответы и помощь с кодом":"Answers and coding help","Настройки API":"API settings","Передавать код открытого файла как контекст":"Include open file as context","Файл не открыт":"No file open","Чем помочь?":"How can I help?","Задайте вопрос обычным языком. Для задач с кодом можно передать открытый файл и применить предложенный результат в редакторе.":"Ask a question in natural language. For coding tasks, include the open file as context and apply the suggested result in the editor.","ИИ не сохраняет файлы сам: вставка кода требует явного нажатия, а сохранение — обычной кнопки «Сохранить».":"AI does not save files automatically. You must explicitly apply code, then use Save to write the file.","Напишите вопрос или задачу по коду… (Enter — отправить, Shift+Enter — новая строка)":"Ask a question or coding task… (Enter to send, Shift+Enter for a new line)","Отправить":"Send","Расширения файлового менеджера":"File manager extensions","Установить модуль из ZIP":"Install module from ZIP","Загрузите архив с manifest.json и PHP/JS/CSS-файлами модуля. Архив проверяется на небезопасные пути перед распаковкой.":"Upload an archive with manifest.json and the module PHP/JS/CSS files. Unsafe paths are checked before extraction.","Модули пока не установлены. Скачайте шаблон, изучите README.md, измените файлы и загрузите ZIP.":"No modules installed yet. Download the template, read README.md, edit the files, then upload the ZIP.","Нажмите «Создать модуль / шаблон» и скачайте ZIP-шаблон.":"Click Create module / template to download a ZIP template.","Ошибка загрузки:":"Load error:","Модуль":"Module","ID:":"ID:","Важно:":"Important:","Установка…":"Installing…","Модуль установлен, но в module.php не определён callback render.":"The module is installed, but module.php does not define a render callback.","Файл слишком большой для просмотра":"File is too large to preview","Тип файла не поддерживается для просмотра":"This file type cannot be previewed","Ссылка":"Link","Копировать путь":"Copy path","Переместить":"Move","Переименовать файл":"Rename file","Создать":"Create","Поиск по файлам":"Search files","Найти":"Find","Следующий":"Next","Предыдущий":"Previous","Назад":"Back","Вперёд":"Forward","Перезагрузить":"Reload","Проверить":"Check","Далее":"Next","Предпросмотр":"Preview","Редактировать":"Edit","Сохранить изменения":"Save changes","Не сохранено":"Unsaved","Изменения сохранены":"Changes saved","Требуется обновление страницы":"Page reload required","Последние ошибки подключения":"Recent connection errors","Ошибок пока нет.":"No errors yet.","API пока не проверялся.":"The API has not been tested yet.","Проверить PHP":"Check PHP","Статус сервера":"Server status","Пустая папка":"Empty folder","Файлов нет":"No files","Папки":"Folders","Файлы":"Files","Подключение":"Connection","Проверка":"Test","Сервер":"Server","Работает":"Working","Не работает":"Not working","KOFFEE DEVELOPER - Файловый менеджер":"KOFFEE DEVELOPER - File Manager","KOFFEE DEVELOPER — Файловый менеджер":"KOFFEE DEVELOPER — File Manager","ПРОВОДНИК":"EXPLORER","Распакуйте архив. В корне должны лежать":"Extract the archive. These files must be at its root","; переводы — в":"; translations go in","и":"and","Задайте в manifest уникальный":"Set a unique value in manifest for",", отображаемое":", a display",", версию и":", version, and","В":"In","реализуйте":"implement","для содержимого новой вкладки и":"for the new tab content and","для серверных методов. В JS вызывайте":"for server methods. In JS, call","Упакуйте содержимое папки в ZIP без лишней внешней папки и установите архив здесь. После установки страница перезагрузится и новая вкладка появится слева.":"Zip the folder contents without an extra parent folder, then install the archive here. The page reloads after installation and the new tab appears on the left.","Важно: PHP-код установленного модуля выполняется с правами веб-сервера. Не устанавливайте архивы от неизвестных авторов; проверьте код перед загрузкой.":"Important: installed module PHP runs with the web server permissions. Do not install ZIPs from unknown authors; review the code first.","Кликните на файл в проводнике, чтобы открыть его здесь":"Click a file in Explorer to open it here","Сохранить файл":"Save file","Форматировать документ":"Format document","Создать новый файл":"Create new file","Создать новую папку":"Create new folder","Обновить страницу":"Reload page","Новое имя":"New name","Макс. размер: 10MB. Разрешены: php, html, css, js, json, txt, md, jpg, png, gif, mp3, wav, ogg":"Max size: 10 MB. Allowed: php, html, css, js, json, txt, md, jpg, png, gif, mp3, wav, ogg","Загрузить":"Upload","Имя папки":"Folder name","Имя файла (с расширением)":"File name (with extension)","Поддерживаемые расширения: php, html, css, js, ts, json, xml, lua, py, rb, sh, c, cpp, cs, java, go, rs, sql, md, txt, yaml, ini и др.":"Supported extensions: php, html, css, js, ts, json, xml, lua, py, rb, sh, c, cpp, cs, java, go, rs, sql, md, txt, yaml, ini and more","Автор:":"Author:","Команда:":"Team:","Версия:":"Version:","Сборка:":"Build:","При модификации просьба указать автора —":"If modified, please credit the author —","Проверить обновления":"Check for updates","Полностью чёрная тема (OLED) — отдельная от светлой/тёмной, со своей темой для редактора кода":"Pure black (OLED) theme separate from dark/light, with its own code editor theme","Снежинки на экране: вкл/выкл, интенсивность слабая/средняя/сильная/метель/авто-погода, разлетаются и закручиваются вокруг курсора":"On-screen snow: toggle, choose intensity (light/medium/heavy/blizzard/auto); flakes swirl around the cursor","Новая заставка: приветствие по времени суток, анимированный фон, простые «флип»-часы в стиле часов из шапки окна, дата на русском":"New screensaver: greeting by time of day, animated background, flip clock and Russian date","Мобильное нижнее меню для быстрого переключения между разделами + кнопка сворачивания":"Mobile bottom menu for quick section switching, with a collapse button","Полноценный файловый менеджер на мобильных — рабочий проводник на весь экран, исправлен поиск, кнопки переименовать/удалить всегда видны":"Full-screen mobile file manager with working Explorer, search fixes, and visible rename/delete buttons","Окна подтверждения в стиле сайта вместо системных confirm() — для удаления, выхода, очистки лога и т.д.":"Styled confirmation dialogs instead of browser confirm() for deleting, signing out, clearing logs, and more","Прокрутка в окнах настроек и «О программе», чтобы кнопки всегда были видны":"Scrolling in Settings and About dialogs so buttons remain accessible","Режим «Конструктор» для PHP/HTML-файлов: живое превью страницы с переключением ПК/Планшет/Моб. и ручным изменением размера":"Designer mode for PHP/HTML files: live page preview with desktop/tablet/mobile presets and manual resizing","В Конструкторе — просмотр исходного HTML, CSS и JS страницы в редакторе с номерами строк":"Designer includes HTML, CSS and JS source editors with line numbers","Инспектор элементов: подсветка при наведении, список применяемых CSS-правил, окно с HTML/CSS/скриптами элемента по клику":"Element inspector: hover highlighting, applied CSS rules, and an HTML/CSS/script view for clicked elements","Приближение и отдаление изображений колёсиком мыши с перетаскиванием и кнопками управления":"Zoom images with the mouse wheel, drag them, or use the controls","Автоматическая проверка обновлений — уведомление о новой версии со списком изменений и ссылкой на GitHub":"Automatic update checks with release notes and a GitHub link","Исправления чёрной темы для окна «О программе», формы переименования и уведомлений":"Pure black theme fixes for About, Rename and notifications","Доступно обновление":"Update available","Вышла новая версия":"A new version is available","— у вас установлена v3.3.1":"— currently installed: v3.3.1","Что нового":"What’s new","Напомнить позже":"Remind me later","Обновить":"Update","Что отображать на заставке":"What to show on the screensaver","Только дата":"Date only","Количество снежинок":"Snowflake count","ИИ-модели и API":"AI models and API","Ключ отправляется только с сервера провайдеру и хранится вне публичной папки сайта, если права хостинга это позволяют. Для изменения сохранённого подключения оставьте ключ пустым, чтобы сохранить прежний.":"The key is sent to the provider only by the server and stored outside the public site folder when permissions allow. Leave the key blank to keep the saved key when editing a connection.","OpenAI-compatible (OpenRouter / DeepSeek / другой)":"OpenAI-compatible (OpenRouter / DeepSeek / other)","Конструктор —":"Designer —","ПК":"Desktop","Планшет":"Tablet","Моб.":"Mobile","Превью":"Preview","Инспектор элементов":"Element inspector","Выбранный элемент":"Selected element","Наведите курсор на элемент на странице":"Hover over an element on the page","Все классы на странице (":"All page classes (","Все ID на странице (":"All page IDs (","Элемент":"Element","Скрипты":"Scripts","Показать в коде":"Show in code","Подтверждение":"Confirmation","Лог":"Log","Сдвиньте мышь или нажмите клавишу":"Move the mouse or press a key","Просмотр":"View","На вашем устройстве возникла проблема, и его":"Your device ran into a problem and needs","нужно перезагрузить.":"to restart.","Мы просто собираем сведения об ошибке, а затем выполним":"We are collecting some error information, then","перезапуск. (":"we will restart. (","% готово)":"% complete)","Дополнительные сведения об этой проблеме и возможных исправлениях":"More information about this problem and possible fixes","можно найти по ссылке:":"can be found at:","Если вы обращаетесь в службу поддержки, сообщите им":"If you contact support, give them this","следующую информацию:":"information:","Код остановки: KOFFEE_FILE_MANAGER_CRITICAL_ERROR":"Stop code: KOFFEE_FILE_MANAGER_CRITICAL_ERROR","[ Нажмите здесь для возврата ]":"[ Click here to return ]","Без имени 1":"Untitled 1","Язык:":"Language:","Очистить":"Clear","/ (корень)":"/ (root)","Выбрать":"Select","Загрузка...":"Loading...","Основные":"General","Эффекты":"Effects","ИИ / API":"AI / API","Пользователи":"Users","Искать бета-версии":"Check for beta versions","Показывать отдельное окно, когда на beta_version.php доступна новая бета-сборка":"Show a separate dialog when a new beta build is available on beta_version.php","Пользователи панели":"Panel users","Создавайте отдельные учётные записи. Пароли хранятся в виде хеша в приватном каталоге. Администратор может просматривать журнал действий по логину.":"Create separate accounts. Passwords are stored as hashes in a private directory. Administrators can view the activity log by login.","Логин":"Login","Роль":"Role","Пароль":"Password","Можно короткий пароль; пусто — пароль не менять":"Short passwords are allowed; leave blank to keep the current password","Повтор пароля":"Confirm password","Сохранить пользователя":"Save user","Новый":"New","Обновить список":"Refresh list","Управление учётными записями.":"Account management.","Новая учётная запись. Пароль может быть коротким, но не пустым.":"New account. A short password is allowed, but it cannot be empty.","Загрузка…":"Loading…","Пользователей нет.":"No users.","Журнал пуст.":"Activity log is empty.","Администратор":"Administrator","Пользователь":"User","активен":"active","Изменить":"Edit","Удалить пользователя":"Delete user","Удалить":"Delete","Пользователь создан.":"User created.","Пользователь обновлён.":"User updated.","Пользователь удалён.":"User deleted.","Не удалось загрузить пользователей.":"Failed to load users.","Не удалось сохранить пользователя.":"Failed to save user.","Доступна новая бета-версия":"New beta version available","Новая бета-сборка:":"New beta build:","Бета-версии могут содержать экспериментальные функции. Перед обновлением создайте резервную копию.":"Beta versions may contain experimental features. Create a backup before updating.","Что нового в бета-версии":"What’s new in the beta","Обновить на бета-версию":"Update to beta","Позже":"Later","Первичная настройка":"Initial setup","Создать администратора":"Create administrator","Telegram KOFFEE DEVELOPER":"KOFFEE DEVELOPER on Telegram","Отсчёт до Нового года":"New Year countdown","Заменяет только блок часов сверху и дату/время на заставке. Приветствие и обычные настройки сохраняются.":"Replaces only the top clock and the date/time block on the screensaver. Greeting and regular settings are preserved.","До Нового года:":"Until New Year:","Загрузить файлы и папки":"Upload files and folders","Выбрать файлы":"Choose files","Выбрать папку":"Choose folder","Перетащите сюда файлы или папки":"Drop files or folders here","Загрузить выбранное":"Upload selected","Выключить":"Disable","Включить":"Enable","Заблокировать":"Block","Разблокировать":"Unblock","последний вход:":"last login:","Требовать смену пароля при следующем входе":"Require password change on next login","Авторизация панели":"Panel authentication","Пользователь заблокирован":"User blocked","Проверить бета-версию":"Check beta version","Курсор и прокрутка":"Cursor and scrolling","Круглый курсор":"Circular cursor","Заменить системный указатель аккуратным круглым индикатором":"Replace the system pointer with a circular indicator","Плавная прокрутка":"Smooth scrolling","Медленное, мягкое движение с небольшой задержкой при прокрутке списков и панелей":"Slow, smooth scrolling with a slight delay in lists and panels","Файлы с таким именем уже существуют":"Files with this name already exist","Для каждого конфликта выберите: заменить файл (старая версия будет сохранена в корзине) или создать новый файл с номером в названии.":"For each conflict, choose whether to replace the file (the old version is saved in Trash) or create a numbered copy.","Заменить существующий файл":"Replace existing file","Создать новый файл с номером":"Create a numbered copy","Продолжить загрузку":"Continue upload","Отмена":"Cancel","Старая версия сохранена в корзине":"The previous version is saved in Trash"};
 function kdApplyLanguage(lang) {
     lang = lang === 'en' ? 'en' : 'ru'; window.KD_LANGUAGE = lang;
     if (lang === 'ru') {
