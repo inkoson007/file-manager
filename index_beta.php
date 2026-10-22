@@ -34,7 +34,7 @@ define('MAX_UPLOAD_SIZE',  10 * 1024 * 1024); // 10 MB
 // ║  Версия                                                      ║
 define('VERSION', '3.3.1');
 define('BUILD_CHANNEL', 'beta');
-define('BETA_REVISION', '2');
+define('BETA_REVISION', '3');
 define('VERSION_LABEL', VERSION . (BUILD_CHANNEL === 'beta' ? ' beta ' . BETA_REVISION : ''));
 // ╠══════════════════════════════════════════════════════════════╣
 // ║  Текстовые расширения (редактируются в Monaco Editor)        ║
@@ -139,17 +139,71 @@ function kdAuthFindUser($users, $id) {
     foreach ($users as $user) if ((string)($user['id'] ?? '') === (string)$id) return $user;
     return null;
 }
+function kdAuthThemeCss() {
+    return <<<'AUTHCSS'
+*{box-sizing:border-box}
+body.kd-auth-page{--auth-bg:#161a25;--auth-wall:#111522;--auth-panel:#252936;--auth-titlebar:#303441;--auth-card:#222633;--auth-text:#edf0f6;--auth-muted:#a7adbb;--auth-border:#454b5a;--auth-input:#171b25;--auth-accent:#1687e8;--auth-shadow:rgba(0,0,0,.46);margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse at 18% 15%,#30395b 0,transparent 42%),radial-gradient(ellipse at 85% 80%,#263d59 0,transparent 43%),var(--auth-wall);color:var(--auth-text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;transition:background .2s,color .2s}
+body.kd-auth-page[data-theme="light"]{--auth-bg:#f7f8fb;--auth-wall:#dfe7f2;--auth-panel:#fff;--auth-titlebar:#f0f2f6;--auth-card:#fff;--auth-text:#222631;--auth-muted:#687080;--auth-border:#d4d9e2;--auth-input:#fff;--auth-accent:#0878d1;--auth-shadow:rgba(33,50,75,.22);background:radial-gradient(ellipse at 18% 15%,#fff 0,transparent 42%),radial-gradient(ellipse at 85% 80%,#bcd8f4 0,transparent 43%),var(--auth-wall)}
+body.kd-auth-page[data-theme="black"]{--auth-bg:#000;--auth-wall:#000;--auth-panel:#050505;--auth-titlebar:#080808;--auth-card:#030303;--auth-text:#eee;--auth-muted:#929292;--auth-border:#222;--auth-input:#080808;--auth-accent:#3b8eff;--auth-shadow:rgba(0,0,0,.75);background:#000}
+.kd-auth-window{width:min(520px,100%);overflow:hidden;border:1px solid var(--auth-border);border-radius:13px;background:var(--auth-panel);box-shadow:0 26px 80px var(--auth-shadow);color:var(--auth-text)}
+.kd-auth-titlebar{height:44px;position:relative;display:flex;align-items:center;gap:7px;padding:0 13px;background:var(--auth-titlebar);border-bottom:1px solid var(--auth-border);user-select:none}
+.kd-auth-traffic{display:flex;gap:7px;flex:0 0 auto;align-items:center}.kd-auth-traffic span{width:12px;height:12px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px #0001}.kd-auth-traffic .red{background:#ff5f57}.kd-auth-traffic .yellow{background:#febc2e}.kd-auth-traffic .green{background:#28c840}
+.kd-auth-title{position:absolute;left:125px;right:125px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.15px;color:var(--auth-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.kd-auth-theme-switch{margin-left:auto;display:flex;align-items:center;gap:5px;position:relative;z-index:1}.kd-auth-theme-button{width:22px;height:22px;border:1px solid var(--auth-border);border-radius:6px;background:transparent;display:grid;place-items:center;padding:0;cursor:pointer}.kd-auth-theme-button span{display:block;width:11px;height:11px;border-radius:50%;border:1px solid #7775}.kd-auth-theme-button[data-kd-auth-theme="light"] span{background:#fff}.kd-auth-theme-button[data-kd-auth-theme="dark"] span{background:#363b47}.kd-auth-theme-button[data-kd-auth-theme="black"] span{background:#000;border-color:#777}.kd-auth-theme-button.active{outline:2px solid var(--auth-accent);outline-offset:1px}
+.kd-auth-content{padding:27px 30px 24px}.kd-auth-brand{text-align:center;margin:0 0 19px}.kd-auth-logo{display:inline-flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:13px;background:linear-gradient(135deg,#6c3483,#1a5276);color:#fff;font-size:20px;font-weight:850;letter-spacing:-1px;box-shadow:0 5px 16px #0002}.kd-auth-brand h1{margin:11px 0 5px;font-size:18px;letter-spacing:.35px;color:var(--auth-text)}.kd-auth-brand p{margin:0;font-size:12px;color:var(--auth-muted);line-height:1.6}
+.kd-auth-heading{margin:0 0 7px;font-size:17px;font-weight:650}.kd-auth-note{margin:0 0 17px;font-size:12px;color:var(--auth-muted);line-height:1.65}.kd-auth-error{padding:10px 12px;border:1px solid #d34e574e;background:#d34e5718;color:#ff8d96;border-radius:7px;margin:0 0 14px;line-height:1.45}.kd-auth-field{margin:12px 0}.kd-auth-field label{display:block;font-size:12px;color:var(--auth-muted);margin-bottom:6px}.kd-auth-field input{display:block;width:100%;min-width:0;padding:11px 12px;border:1px solid var(--auth-border);border-radius:7px;background:var(--auth-input);color:var(--auth-text);font:inherit;font-size:14px;outline:none;transition:border-color .15s,box-shadow .15s}.kd-auth-field input:focus{border-color:var(--auth-accent);box-shadow:0 0 0 3px rgba(0,122,204,.17);box-shadow:0 0 0 3px color-mix(in srgb,var(--auth-accent) 17%,transparent)}
+.kd-auth-submit{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;margin-top:17px;border:1px solid transparent;border-radius:7px;background:var(--auth-accent);color:white;font-size:13px;font-weight:650;cursor:pointer;box-shadow:0 2px 5px #0001;transition:filter .15s,transform .15s}.kd-auth-submit:hover{filter:brightness(1.08)}.kd-auth-submit:active{transform:translateY(1px)}.kd-auth-foot{padding:13px 20px;text-align:center;border-top:1px solid var(--auth-border);background:var(--auth-titlebar);color:var(--auth-muted);font-size:11px}.kd-auth-badge{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--auth-muted);margin-top:10px}.kd-auth-badge i{color:#39b980}
+@media(max-width:520px){body.kd-auth-page{padding:12px}.kd-auth-title{left:94px;right:94px;font-size:10px}.kd-auth-content{padding:22px 18px}.kd-auth-window{border-radius:11px}.kd-auth-theme-button{width:20px;height:20px}}
+AUTHCSS;
+}
+function kdAuthThemeButtons() {
+    return '<div class="kd-auth-theme-switch" aria-label="Тема оформления">'
+        . '<button type="button" class="kd-auth-theme-button" data-kd-auth-theme="light" title="Светлая тема" aria-label="Светлая тема"><span></span></button>'
+        . '<button type="button" class="kd-auth-theme-button" data-kd-auth-theme="dark" title="Тёмная тема" aria-label="Тёмная тема"><span></span></button>'
+        . '<button type="button" class="kd-auth-theme-button" data-kd-auth-theme="black" title="Чёрная тема" aria-label="Чёрная тема"><span></span></button>'
+        . '</div>';
+}
+function kdAuthThemeScript() {
+    return <<<'AUTHTHEMEJS'
+(function(){
+    function validTheme(t){return t==='light'||t==='dark'||t==='black'?t:'dark';}
+    function savedTheme(){try{var s=JSON.parse(localStorage.getItem('kd_settings')||'{}');return validTheme(s.themeMode||(s.lightTheme?'light':'dark'));}catch(e){return 'dark';}}
+    function applyTheme(theme, persist){theme=validTheme(theme);document.body.setAttribute('data-theme',theme);var buttons=document.querySelectorAll('[data-kd-auth-theme]');Array.prototype.forEach.call(buttons,function(b){var active=b.getAttribute('data-kd-auth-theme')===theme;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active?'true':'false');});if(persist){try{var s=JSON.parse(localStorage.getItem('kd_settings')||'{}');s.themeMode=theme;delete s.lightTheme;localStorage.setItem('kd_settings',JSON.stringify(s));}catch(e){}}}
+    document.addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('[data-kd-auth-theme]'):null;if(b)applyTheme(b.getAttribute('data-kd-auth-theme'),true);});
+    applyTheme(savedTheme(),false);
+})();
+AUTHTHEMEJS;
+}
 function kdAuthPage($title, $error, $setup, $token) {
     $action = $setup ? 'kd_first_admin' : 'do_login';
     $button = $setup ? 'Создать администратора' : 'Войти';
     $note = $setup ? 'Создайте первого администратора панели. Пароль будет сохранён в виде хеша, а не в PHP-коде.' : 'Войдите под учётной записью, созданной администратором. Если доступ заблокирован, обратитесь к администратору.';
-    echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KOFFEE DEVELOPER — ' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1e1e1e;color:#ddd;font:14px Segoe UI,Arial,sans-serif}.wrap{width:min(420px,calc(100% - 28px))}.logo{text-align:center;margin-bottom:20px}.kd{display:inline-flex;width:52px;height:52px;align-items:center;justify-content:center;background:linear-gradient(135deg,#6c3483,#1a5276);border-radius:12px;font-weight:800;font-size:19px;color:white}.logo h1{font-size:18px;color:#fff}.card{background:#252526;border:1px solid #3c3c3c;border-radius:10px;padding:24px}.note{font-size:12px;color:#999;line-height:1.6;margin-bottom:18px}.field{margin:12px 0}.field label{display:block;color:#aaa;font-size:12px;margin-bottom:6px}.field input{width:100%;background:#3c3c3c;border:1px solid #555;border-radius:5px;padding:10px 12px;color:#fff}.btn{width:100%;border:0;border-radius:5px;background:#007acc;color:white;padding:11px;cursor:pointer;margin-top:10px}.error{background:#4a2222;border:1px solid #813939;color:#ff9696;padding:10px;border-radius:5px;margin-bottom:14px}.foot{text-align:center;color:#666;font-size:11px;margin-top:18px}</style></head><body><div class="wrap"><div class="logo"><div class="kd">KD</div><h1>KOFFEE DEVELOPER</h1><div class="note">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</div></div><div class="card"><div class="note">' . htmlspecialchars($note, ENT_QUOTES, 'UTF-8') . '</div>';
-    if ($error !== '') echo '<div class="error">' . htmlspecialchars($error, ENT_QUOTES, 'UTF-8') . '</div>';
-    echo '<form method="post"><input type="hidden" name="' . $action . '" value="1"><input type="hidden" name="csrf" value="' . htmlspecialchars($token, ENT_QUOTES, 'UTF-8') . '">';
-    echo '<div class="field"><label>Логин</label><input name="login" required minlength="3" maxlength="40" autocomplete="username" pattern="[A-Za-z0-9_.@-]{3,40}" placeholder="Например, admin"></div>';
-    echo '<div class="field"><label>Пароль</label><input type="password" name="password" required autocomplete="' . ($setup ? 'new-password' : 'current-password') . '"></div>';
-    if ($setup) echo '<div class="field"><label>Повторите пароль</label><input type="password" name="password_confirm" required autocomplete="new-password"></div>';
-    echo '<button class="btn" type="submit">' . $button . '</button></form></div><div class="foot">Учётные записи хранятся отдельно от PHP-кода</div></div></body></html>';
+    ?>
+    <!doctype html>
+    <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>KOFFEE DEVELOPER — <?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style><?= kdAuthThemeCss() ?></style></head>
+    <body class="kd-auth-page" data-theme="dark"><main class="kd-auth-window">
+        <header class="kd-auth-titlebar"><div class="kd-auth-traffic" aria-hidden="true"><span class="red"></span><span class="yellow"></span><span class="green"></span></div><div class="kd-auth-title">KOFFEE DEVELOPER</div><?= kdAuthThemeButtons() ?></header>
+        <section class="kd-auth-content"><div class="kd-auth-brand"><div class="kd-auth-logo">KD</div><h1>KOFFEE DEVELOPER</h1><p>File Manager · безопасное управление файлами</p></div>
+            <h2 class="kd-auth-heading"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></h2><p class="kd-auth-note"><?= htmlspecialchars($note, ENT_QUOTES, 'UTF-8') ?></p>
+            <?php if ($error !== ''): ?><div class="kd-auth-error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+            <form method="post" autocomplete="on"><input type="hidden" name="<?= htmlspecialchars($action, ENT_QUOTES, 'UTF-8') ?>" value="1"><input type="hidden" name="csrf" value="<?= htmlspecialchars($token, ENT_QUOTES, 'UTF-8') ?>">
+                <div class="kd-auth-field"><label for="kdAuthLogin">Логин</label><input id="kdAuthLogin" name="login" required minlength="3" maxlength="40" autocomplete="username" pattern="[A-Za-z0-9_.@-]{3,40}" placeholder="Например, admin" autofocus></div>
+                <div class="kd-auth-field"><label for="kdAuthPassword">Пароль</label><input id="kdAuthPassword" type="password" name="password" required autocomplete="<?= $setup ? 'new-password' : 'current-password' ?>"></div>
+                <?php if ($setup): ?><div class="kd-auth-field"><label for="kdAuthPasswordConfirm">Повторите пароль</label><input id="kdAuthPasswordConfirm" type="password" name="password_confirm" required autocomplete="new-password"></div><?php endif; ?>
+                <button class="kd-auth-submit" type="submit"><i class="fas <?= $setup ? 'fa-user-shield' : 'fa-right-to-bracket' ?>"></i><?= htmlspecialchars($button, ENT_QUOTES, 'UTF-8') ?></button>
+            </form><div class="kd-auth-badge"><i class="fas fa-shield-alt"></i> Учётные записи хранятся отдельно от PHP-кода</div>
+        </section><footer class="kd-auth-foot">KOFFEE DEVELOPER · интерфейс в стиле macOS</footer>
+    </main><script><?= kdAuthThemeScript() ?></script></body></html>
+    <?php
+}
+function kdAuthPasswordChangePage($error, $token) {
+    ?>
+    <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>Смена пароля — KOFFEE DEVELOPER</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style><?= kdAuthThemeCss() ?></style></head>
+    <body class="kd-auth-page" data-theme="dark"><main class="kd-auth-window"><header class="kd-auth-titlebar"><div class="kd-auth-traffic" aria-hidden="true"><span class="red"></span><span class="yellow"></span><span class="green"></span></div><div class="kd-auth-title">KOFFEE DEVELOPER</div><?= kdAuthThemeButtons() ?></header>
+    <section class="kd-auth-content"><div class="kd-auth-brand"><div class="kd-auth-logo">KD</div><h1>KOFFEE DEVELOPER</h1><p>Проверка безопасности учётной записи</p></div><h2 class="kd-auth-heading">Смените пароль</h2><p class="kd-auth-note">Администратор потребовал сменить пароль перед продолжением работы.</p>
+    <?php if ($error !== ''): ?><div class="kd-auth-error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+    <form method="post"><input type="hidden" name="kd_change_password" value="1"><input type="hidden" name="csrf" value="<?= htmlspecialchars($token, ENT_QUOTES, 'UTF-8') ?>"><div class="kd-auth-field"><label for="new_password">Новый пароль</label><input id="new_password" type="password" name="new_password" required autocomplete="new-password"></div><div class="kd-auth-field"><label for="new_password_confirm">Повторите пароль</label><input id="new_password_confirm" type="password" name="new_password_confirm" required autocomplete="new-password"></div><button class="kd-auth-submit" type="submit"><i class="fas fa-key"></i>Сохранить новый пароль</button></form></section><footer class="kd-auth-foot">KOFFEE DEVELOPER · смена пароля обязательна</footer></main><script><?= kdAuthThemeScript() ?></script></body></html>
+    <?php
 }
 
 $kdAuthError = '';
@@ -255,9 +309,7 @@ if ($kdAuthEnabled) {
                 $changeError = 'Не удалось сохранить новый пароль. Проверьте права записи.';
             }
         }
-        echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Смена пароля — KOFFEE DEVELOPER</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1e1e1e;color:#ddd;font:14px Segoe UI,Arial,sans-serif}.card{width:min(430px,calc(100% - 32px));background:#252526;border:1px solid #444;border-radius:10px;padding:24px;box-sizing:border-box}input{box-sizing:border-box;width:100%;padding:11px;margin:7px 0 14px;background:#333;color:#fff;border:1px solid #555;border-radius:5px}button{width:100%;padding:11px;background:#007acc;color:white;border:0;border-radius:5px;cursor:pointer}.err{background:#482727;color:#ffaaaa;padding:10px;border-radius:5px;margin:12px 0}</style></head><body><form class="card" method="post"><h2>Смените пароль</h2><p>Администратор потребовал сменить пароль перед продолжением работы.</p>';
-        if ($changeError !== '') echo '<div class="err">' . htmlspecialchars($changeError, ENT_QUOTES, 'UTF-8') . '</div>';
-        echo '<input type="hidden" name="kd_change_password" value="1"><input type="hidden" name="csrf" value="' . htmlspecialchars((string)($_SESSION['kd_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') . '"><label>Новый пароль</label><input type="password" name="new_password" required autocomplete="new-password"><label>Повторите пароль</label><input type="password" name="new_password_confirm" required autocomplete="new-password"><button type="submit">Сохранить новый пароль</button></form></body></html>'; exit;
+        kdAuthPasswordChangePage($changeError, (string)($_SESSION['kd_csrf'] ?? '')); exit;
     }
 } else {
     // Explicitly disabled authentication: panel remains accessible without an account gate.
@@ -3193,10 +3245,22 @@ function displayFileContent($path) {
         .kd-upload-conflict-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--vsc-border)}
         .kd-upload-conflict-file{min-width:0;flex:1;overflow-wrap:anywhere;font-size:12px}.kd-upload-conflict-file small{display:block;color:var(--vsc-fg-dim);margin-top:4px}
         .kd-upload-conflict-choice{max-width:205px;min-width:165px;background:var(--vsc-sidebar);color:var(--vsc-fg);border:1px solid var(--vsc-border-light);border-radius:5px;padding:8px;font-size:12px}
-        #kdCircleCursor{position:fixed;left:0;top:0;width:24px;height:24px;box-sizing:border-box;border:2px solid var(--vsc-accent);border-radius:50%;pointer-events:none;z-index:50000;opacity:0;transform:translate3d(-100px,-100px,0);background:rgba(0,122,204,.04);box-shadow:0 0 6px rgba(0,122,204,.22);transition:width .12s ease,height .12s ease,background .12s ease,border-color .12s ease;will-change:transform}
+        .kd-cursor-customization-row{align-items:flex-start !important;gap:12px}
+        .kd-cursor-controls{display:grid;grid-template-columns:minmax(145px,1fr) 82px 112px;gap:12px;align-items:center;min-width:0;flex:1;max-width:420px}
+        .kd-cursor-control{display:flex;flex-direction:column;gap:7px;min-width:0}
+        .kd-cursor-control label{font-size:11px;color:var(--vsc-fg-dim);white-space:nowrap}
+        .kd-cursor-control label strong{color:var(--vsc-fg);font-weight:600}
+        .kd-cursor-control input[type=range]{width:100%;accent-color:var(--vsc-accent);cursor:pointer}
+        .kd-cursor-color-control input[type=color]{width:48px;height:30px;padding:3px;border:1px solid var(--vsc-border-light);border-radius:6px;background:var(--vsc-sidebar);cursor:pointer}
+        .kd-cursor-preview-area{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:70px;padding:7px 10px;border:1px solid var(--vsc-border);border-radius:7px;background:var(--vsc-sidebar)}
+        .kd-cursor-preview-area>span{font-size:10px;color:var(--vsc-fg-dim);white-space:nowrap}
+        #kdCircleCursorPreview{width:66px;height:42px;display:flex;align-items:center;justify-content:center;background:var(--vsc-bg);border:1px solid var(--vsc-border);border-radius:5px}
+        #kdCircleCursorPreview span{width:24px;height:24px;box-sizing:border-box;border-radius:50%;border:2px solid #007acc;background:rgba(0,122,204,.07);box-shadow:0 0 6px rgba(0,122,204,.22);transition:width .1s,height .1s,border-color .1s,background .1s,box-shadow .1s}
+        @media(max-width:700px){.kd-cursor-customization-row{display:block !important}.kd-cursor-customization-row>.settings-row-label{margin-bottom:10px}.kd-cursor-controls{grid-template-columns:minmax(100px,1fr) 65px 100px;max-width:none;gap:8px}}
+        #kdCircleCursor{position:fixed;left:0;top:0;width:var(--kd-circle-cursor-size,24px);height:var(--kd-circle-cursor-size,24px);box-sizing:border-box;border:2px solid var(--kd-circle-cursor-color,var(--vsc-accent));border-radius:50%;pointer-events:none;z-index:50000;opacity:0;transform:translate3d(-100px,-100px,0);background:rgba(0,122,204,.04);box-shadow:0 0 6px var(--kd-circle-cursor-shadow,rgba(0,122,204,.22));transition:width .12s ease,height .12s ease,background .12s ease,border-color .12s ease,box-shadow .12s ease;will-change:transform}
         body.kd-circle-cursor-enabled #kdCircleCursor{opacity:1}
         body.kd-circle-cursor-enabled,body.kd-circle-cursor-enabled *{cursor:none!important}
-        #kdCircleCursor.kd-cursor-hover{width:34px;height:34px;background:rgba(0,122,204,.16)}
+        #kdCircleCursor.kd-cursor-hover{width:calc(var(--kd-circle-cursor-size,24px) + 10px);height:calc(var(--kd-circle-cursor-size,24px) + 10px);background:var(--kd-circle-cursor-hover-bg,rgba(0,122,204,.16))}
         @media (pointer:coarse){#kdCircleCursor{display:none!important}body.kd-circle-cursor-enabled,body.kd-circle-cursor-enabled *{cursor:auto!important}}
         body.kd-smooth-scroll-enabled .monaco-editor,body.kd-smooth-scroll-enabled .monaco-editor *{scroll-behavior:auto!important}
         #kdDvdOverlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.93);overflow:hidden;cursor:none}
@@ -4914,7 +4978,7 @@ function displayFileContent($path) {
             <!-- Current version — always expanded -->
             <div class="cl-entry current" style="margin-bottom:6px;flex-shrink:0;">
                 <div class="cl-entry-head">
-                    <span class="cl-entry-ver">v3.3.1 beta 2</span>
+                    <span class="cl-entry-ver">v3.3.1 beta 3</span>
                     <span style="font-size:11px;background:rgba(0,122,204,0.2);color:var(--vsc-accent);padding:1px 7px;border-radius:10px;font-weight:600;">latest</span>
                     <span class="cl-entry-date">22.10.2026</span>
                 </div>
@@ -4928,6 +4992,9 @@ function displayFileContent($path) {
                         <li>При загрузке файла с существующим именем теперь можно выбрать замену (старая версия сохраняется в корзине) или создание нового файла с суффиксом (1), (2) и далее.</li>
                         <li>В «Настройки → Эффекты» добавлен круглый пользовательский курсор.</li>
                         <li>Добавлена необязательная очень плавная прокрутка с небольшой задержкой для списков и панелей; редактор кода не перехватывает прокрутку.</li>
+                        <li>Для круглого курсора добавлены настройка размера (12–64 px), выбор цвета и живой предпросмотр в настройках.</li>
+                        <li>Добавлена отдельная опция инерционной прокрутки: после отпускания колеса движение продолжается, а длина инерции зависит от скорости прокрутки. Инерция работает в панелях и редакторах кода только вместе с плавной прокруткой.</li>
+                        <li>Страницы входа, первичной настройки и обязательной смены пароля оформлены в стиле окна macOS с переключателями светлой, тёмной и чёрной тем; выбранная тема сохраняется для основной панели.</li>
                     </ul>
                 </div>
             </div>
@@ -5135,9 +5202,21 @@ function toggleCl(entry) {
                     <div class="settings-row-label">Круглый курсор<small>Заменить системный указатель аккуратным круглым индикатором</small></div>
                     <label class="kd-switch"><input type="checkbox" id="settingCircleCursorEnabled" onchange="applySettings(true)"><span class="kd-switch-slider"></span></label>
                 </div>
+                <div class="settings-row kd-cursor-customization-row">
+                    <div class="settings-row-label">Размер и цвет<small>Настройте внешний вид курсора; справа отображается предпросмотр</small></div>
+                    <div class="kd-cursor-controls">
+                        <div class="kd-cursor-control"><label for="settingCircleCursorSize">Размер: <strong id="settingCircleCursorSizeLabel">24 px</strong></label><input type="range" id="settingCircleCursorSize" min="12" max="64" step="2" value="24" oninput="applySettings(true);kdUpdateCircleCursorPreview()"></div>
+                        <div class="kd-cursor-control kd-cursor-color-control"><label for="settingCircleCursorColor">Цвет курсора</label><input type="color" id="settingCircleCursorColor" value="#007acc" oninput="applySettings(true);kdUpdateCircleCursorPreview()" aria-label="Цвет круглого курсора"></div>
+                        <div class="kd-cursor-preview-area"><span>Предпросмотр</span><div id="kdCircleCursorPreview" aria-label="Предпросмотр круглого курсора"><span></span></div></div>
+                    </div>
+                </div>
                 <div class="settings-row">
-                    <div class="settings-row-label">Плавная прокрутка<small>Медленное, мягкое движение с небольшой задержкой при прокрутке списков и панелей</small></div>
+                    <div class="settings-row-label">Плавная прокрутка<small>Медленное, мягкое движение с небольшой задержкой при прокрутке списков, панелей и редактора</small></div>
                     <label class="kd-switch"><input type="checkbox" id="settingSmoothScrollEnabled" onchange="applySettings(true)"><span class="kd-switch-slider"></span></label>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">Инерционная прокрутка<small>После отпускания колеса прокрутка ещё немного продолжается; расстояние зависит от скорости</small></div>
+                    <label class="kd-switch"><input type="checkbox" id="settingInertialScrollEnabled" onchange="applySettings(true)"><span class="kd-switch-slider"></span></label>
                 </div>
             </div>
             <div class="settings-group kd-ai-settings">
@@ -6981,7 +7060,10 @@ var kdSettings = {
     snowEnabled:   false,
     snowIntensity: 'normal',
     circleCursorEnabled: false,
+    circleCursorSize: 24,
+    circleCursorColor: '#007acc',
     smoothScrollEnabled: false,
+    inertialScrollEnabled: false,
     autoUpdateCheck: true,
     checkBetaUpdates: <?= (defined('BUILD_CHANNEL') && BUILD_CHANNEL === 'beta') ? 'true' : 'false' ?>,
     uiLanguage: 'ru',
@@ -7006,7 +7088,10 @@ function loadSettings() {
         kdSettings.snowEnabled   = !!s.snowEnabled;
         kdSettings.snowIntensity = s.snowIntensity || 'normal';
         kdSettings.circleCursorEnabled = s.circleCursorEnabled === true;
+        kdSettings.circleCursorSize = Math.max(12, Math.min(64, parseInt(s.circleCursorSize, 10) || 24));
+        kdSettings.circleCursorColor = /^#[0-9a-f]{6}$/i.test(s.circleCursorColor || '') ? s.circleCursorColor : '#007acc';
         kdSettings.smoothScrollEnabled = s.smoothScrollEnabled === true;
+        kdSettings.inertialScrollEnabled = s.inertialScrollEnabled === true;
         kdSettings.autoUpdateCheck = s.autoUpdateCheck !== false;
         kdSettings.checkBetaUpdates = typeof s.checkBetaUpdates === 'boolean' ? s.checkBetaUpdates : OTA_IS_BETA;
         kdSettings.uiLanguage = s.uiLanguage === 'en' ? 'en' : 'ru';
@@ -7172,7 +7257,10 @@ function applySettings(fromUI) {
         var snEl  = document.getElementById('settingSnowEnabled');
         var snIEl = document.getElementById('settingSnowIntensity');
         var circleCursorEl = document.getElementById('settingCircleCursorEnabled');
+        var circleCursorSizeEl = document.getElementById('settingCircleCursorSize');
+        var circleCursorColorEl = document.getElementById('settingCircleCursorColor');
         var smoothScrollEl = document.getElementById('settingSmoothScrollEnabled');
+        var inertialScrollEl = document.getElementById('settingInertialScrollEnabled');
         var auEl  = document.getElementById('settingAutoUpdateCheck');
         var betaEl = document.getElementById('settingCheckBetaUpdates');
         var nyEl = document.getElementById('settingNewYearCountdown');
@@ -7186,7 +7274,10 @@ function applySettings(fromUI) {
         if (snEl) kdSettings.snowEnabled    = snEl.checked;
         if (snIEl) kdSettings.snowIntensity = snIEl.value;
         if (circleCursorEl) kdSettings.circleCursorEnabled = circleCursorEl.checked;
+        if (circleCursorSizeEl) kdSettings.circleCursorSize = Math.max(12, Math.min(64, parseInt(circleCursorSizeEl.value, 10) || 24));
+        if (circleCursorColorEl && /^#[0-9a-f]{6}$/i.test(circleCursorColorEl.value)) kdSettings.circleCursorColor = circleCursorColorEl.value;
         if (smoothScrollEl) kdSettings.smoothScrollEnabled = smoothScrollEl.checked;
+        if (inertialScrollEl) kdSettings.inertialScrollEnabled = inertialScrollEl.checked;
         if (auEl) kdSettings.autoUpdateCheck = auEl.checked;
         if (betaEl) { kdSettings.checkBetaUpdates = betaEl.checked; var betaManualBtnOnChange = document.getElementById('manualCheckBetaUpdateBtn'); if (betaManualBtnOnChange) betaManualBtnOnChange.style.display = betaEl.checked ? '' : 'none'; }
         if (nyEl) kdSettings.newYearCountdown = nyEl.checked;
@@ -7255,8 +7346,11 @@ function applySettings(fromUI) {
     }
 
     // Optional cursor and smooth wheel-scroll effects.
+    var inertialControl = document.getElementById('settingInertialScrollEnabled');
+    if (inertialControl) inertialControl.disabled = !kdSettings.smoothScrollEnabled;
     kdApplyCircleCursor();
     kdApplySmoothScroll();
+    kdUpdateCircleCursorPreview();
 
     // Meta visibility
     document.documentElement.style.setProperty('--meta-opacity-hover', kdSettings.showMeta ? '1' : '0');
@@ -7279,7 +7373,10 @@ function syncSettingsUI() {
     // These controls belong to syncSettingsUI too; without local declarations
     // the first Settings click throws ReferenceError and the modal never opens.
     var circleCursorEl = document.getElementById('settingCircleCursorEnabled');
+    var circleCursorSizeEl = document.getElementById('settingCircleCursorSize');
+    var circleCursorColorEl = document.getElementById('settingCircleCursorColor');
     var smoothScrollEl = document.getElementById('settingSmoothScrollEnabled');
+    var inertialScrollEl = document.getElementById('settingInertialScrollEnabled');
     var auEl  = document.getElementById('settingAutoUpdateCheck');
     var betaEl = document.getElementById('settingCheckBetaUpdates');
     var nyEl = document.getElementById('settingNewYearCountdown');
@@ -7293,7 +7390,11 @@ function syncSettingsUI() {
     if (snEl)  snEl.checked  = kdSettings.snowEnabled;
     if (snIEl) snIEl.value   = kdSettings.snowIntensity;
     if (circleCursorEl) circleCursorEl.checked = !!kdSettings.circleCursorEnabled;
+    if (circleCursorSizeEl) circleCursorSizeEl.value = String(kdSettings.circleCursorSize || 24);
+    if (circleCursorColorEl) circleCursorColorEl.value = kdSettings.circleCursorColor || '#007acc';
     if (smoothScrollEl) smoothScrollEl.checked = !!kdSettings.smoothScrollEnabled;
+    if (inertialScrollEl) { inertialScrollEl.checked = !!kdSettings.inertialScrollEnabled; inertialScrollEl.disabled = !kdSettings.smoothScrollEnabled; }
+    if (typeof kdUpdateCircleCursorPreview === 'function') kdUpdateCircleCursorPreview();
     if (auEl)  auEl.checked  = kdSettings.autoUpdateCheck;
     if (betaEl) betaEl.checked = !!kdSettings.checkBetaUpdates;
     var betaManualBtn = document.getElementById('manualCheckBetaUpdateBtn'); if (betaManualBtn) betaManualBtn.style.display = kdSettings.checkBetaUpdates ? '' : 'none';
@@ -7310,7 +7411,7 @@ function syncSettingsUI() {
     if (snowRow) snowRow.style.display = kdSettings.snowEnabled ? '' : 'none';
 }
 
-// ── Optional circular pointer ──
+// ── Optional configurable circular pointer ──
 var kdCircleCursorEl = null;
 function kdEnsureCircleCursor() {
     if (kdCircleCursorEl && kdCircleCursorEl.isConnected) return kdCircleCursorEl;
@@ -7323,10 +7424,40 @@ function kdEnsureCircleCursor() {
     }
     return kdCircleCursorEl;
 }
+function kdCursorColorRgba(hex, alpha) {
+    var value = /^#[0-9a-f]{6}$/i.test(hex || '') ? hex.slice(1) : '007acc';
+    var r = parseInt(value.slice(0,2),16), g = parseInt(value.slice(2,4),16), b = parseInt(value.slice(4,6),16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+function kdUpdateCircleCursorPreview() {
+    // Read the canonical persisted settings instead of the DOM defaults. This matters during
+    // startup, when applySettings(false) runs before settings controls are synchronized.
+    var size = Math.max(12, Math.min(64, parseInt(kdSettings.circleCursorSize, 10) || 24));
+    var color = /^#[0-9a-f]{6}$/i.test(kdSettings.circleCursorColor || '') ? kdSettings.circleCursorColor : '#007acc';
+    var label = document.getElementById('settingCircleCursorSizeLabel');
+    if (label) label.textContent = size + ' px';
+    var preview = document.getElementById('kdCircleCursorPreview');
+    var sample = preview ? preview.querySelector('span') : null;
+    if (sample) {
+        var previewSize = Math.min(size, 38);
+        sample.style.width = previewSize + 'px'; sample.style.height = previewSize + 'px';
+        sample.style.borderColor = color; sample.style.backgroundColor = kdCursorColorRgba(color, .07);
+        sample.style.boxShadow = '0 0 6px ' + kdCursorColorRgba(color, .25);
+    }
+    var ring = kdEnsureCircleCursor();
+    if (ring) {
+        ring.style.setProperty('--kd-circle-cursor-size', size + 'px');
+        ring.style.setProperty('--kd-circle-cursor-color', color);
+        ring.style.setProperty('--kd-circle-cursor-shadow', kdCursorColorRgba(color, .25));
+        ring.style.setProperty('--kd-circle-cursor-hover-bg', kdCursorColorRgba(color, .16));
+        ring.style.backgroundColor = kdCursorColorRgba(color, ring.classList.contains('kd-cursor-hover') ? .16 : .04);
+    }
+}
 function kdApplyCircleCursor() {
     var enabled = !!kdSettings.circleCursorEnabled;
     if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) enabled = false;
     document.body.classList.toggle('kd-circle-cursor-enabled', enabled);
+    kdUpdateCircleCursorPreview();
     var ring = kdEnsureCircleCursor();
     if (!ring) return;
     if (!ring.getAttribute('data-kd-bound')) {
@@ -7339,6 +7470,7 @@ function kdApplyCircleCursor() {
             if (!kdCircleCursorEl) return;
             var hit = e.target && e.target.closest ? e.target.closest('a,button,input,select,label,.file-item,.toolbar-btn,.activity-btn') : null;
             kdCircleCursorEl.classList.toggle('kd-cursor-hover', !!hit);
+            kdCircleCursorEl.style.backgroundColor = kdCursorColorRgba(kdSettings.circleCursorColor || '#007acc', hit ? .16 : .04);
         }, true);
     }
 }
@@ -7349,7 +7481,7 @@ var kdSmoothScrollListenerOn = false;
 var kdSmoothMonacoStates = [];
 function kdGetSmoothScrollState(el) {
     for (var i = 0; i < kdSmoothScrollStates.length; i++) if (kdSmoothScrollStates[i].el === el) return kdSmoothScrollStates[i];
-    var state = {el:el, target:el.scrollTop, raf:0}; kdSmoothScrollStates.push(state); return state;
+    var state = {el:el, target:el.scrollTop, raf:0, inertiaTimer:0, inertiaVelocity:0}; kdSmoothScrollStates.push(state); return state;
 }
 function kdKnownMonacoEditors() {
     var list = [];
@@ -7378,14 +7510,68 @@ function kdUpdateMonacoSmoothOptions(enabled) {
 }
 function kdGetMonacoSmoothState(editor) {
     for (var i = 0; i < kdSmoothMonacoStates.length; i++) if (kdSmoothMonacoStates[i].editor === editor) return kdSmoothMonacoStates[i];
-    var state = {editor:editor, target:editor.getScrollTop(), raf:0};
+    var state = {editor:editor, target:editor.getScrollTop(), raf:0, inertiaTimer:0, inertiaVelocity:0};
     kdSmoothMonacoStates.push(state);
     return state;
 }
+function kdStartMonacoSmoothAnimation(state) {
+    if (!state || state.raf || !state.editor) return;
+    var step = function() {
+        try {
+            var editor = state.editor;
+            if (!editor || !editor.getDomNode() || !editor.getDomNode().isConnected) { state.raf = 0; return; }
+            var max = Math.max(0, editor.getScrollHeight() - editor.getLayoutInfo().height);
+            state.target = Math.max(0, Math.min(max, state.target));
+            var current = editor.getScrollTop(), diff = state.target - current;
+            if (Math.abs(diff) < 0.7) { editor.setScrollTop(state.target); state.raf = 0; return; }
+            editor.setScrollTop(current + diff * 0.16);
+            state.raf = requestAnimationFrame(step);
+        } catch (ignore) { state.raf = 0; }
+    };
+    state.raf = requestAnimationFrame(step);
+}
+function kdStartElementSmoothAnimation(state) {
+    if (!state || state.raf || !state.el) return;
+    var step = function() {
+        if (!state.el || !state.el.isConnected) { state.raf = 0; return; }
+        var max = Math.max(0, state.el.scrollHeight - state.el.clientHeight);
+        state.target = Math.max(0, Math.min(max, state.target));
+        var current = state.el.scrollTop, diff = state.target - current;
+        if (Math.abs(diff) < 0.7) { state.el.scrollTop = state.target; state.raf = 0; return; }
+        state.el.scrollTop = current + diff * 0.14;
+        state.raf = requestAnimationFrame(step);
+    };
+    state.raf = requestAnimationFrame(step);
+}
+function kdQueueScrollInertia(state, delta, type) {
+    if (!state) return;
+    if (state.inertiaTimer) clearTimeout(state.inertiaTimer);
+    if (!kdSettings.inertialScrollEnabled || !kdSettings.smoothScrollEnabled) { state.inertiaVelocity = 0; state.inertiaTimer = 0; return; }
+    state.inertiaVelocity = Math.max(-850, Math.min(850, (state.inertiaVelocity || 0) * 0.34 + delta * 0.66));
+    state.inertiaTimer = setTimeout(function() {
+        state.inertiaTimer = 0;
+        if (!kdSettings.inertialScrollEnabled || !kdSettings.smoothScrollEnabled) { state.inertiaVelocity = 0; return; }
+        var velocity = state.inertiaVelocity || 0;
+        state.inertiaVelocity = 0;
+        var momentum = Math.max(-1300, Math.min(1300, velocity * 1.65));
+        if (Math.abs(momentum) < 24) return;
+        if (type === 'monaco' && state.editor) {
+            try {
+                var editor = state.editor;
+                var max = Math.max(0, editor.getScrollHeight() - editor.getLayoutInfo().height);
+                state.target = Math.max(0, Math.min(max, editor.getScrollTop() + momentum));
+                kdStartMonacoSmoothAnimation(state);
+            } catch (ignore) {}
+        } else if (state.el) {
+            var maxEl = Math.max(0, state.el.scrollHeight - state.el.clientHeight);
+            state.target = Math.max(0, Math.min(maxEl, state.el.scrollTop + momentum));
+            kdStartElementSmoothAnimation(state);
+        }
+    }, 105);
+}
 function kdAnimateMonacoWheel(e, editor) {
     if (!editor || !kdSettings.smoothScrollEnabled || e.ctrlKey || e.altKey || Math.abs(e.deltaY) < 0.1) return false;
-    // Monaco handles the mouse wheel internally, so ordinary DOM scrollTop animation
-    // does not affect its model viewport. Drive the editor through its public API.
+    // Monaco handles wheel input internally; animate through its public scroll API.
     e.preventDefault();
     e.stopPropagation();
     var scale = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? Math.max(120, window.innerHeight * 0.85) : 1);
@@ -7395,22 +7581,8 @@ function kdAnimateMonacoWheel(e, editor) {
     try { max = Math.max(0, editor.getScrollHeight() - editor.getLayoutInfo().height); } catch (ignore) {}
     var currentTarget = state.raf ? state.target : editor.getScrollTop();
     state.target = Math.max(0, Math.min(max, currentTarget + delta * 0.78));
-    if (state.raf) return true;
-    var step = function() {
-        try {
-            if (!state.editor || !state.editor.getDomNode() || !state.editor.getDomNode().isConnected) { state.raf = 0; return; }
-            var current = state.editor.getScrollTop();
-            var diff = state.target - current;
-            if (Math.abs(diff) < 0.6) {
-                state.editor.setScrollTop(state.target);
-                state.raf = 0;
-                return;
-            }
-            state.editor.setScrollTop(current + diff * 0.16);
-            state.raf = requestAnimationFrame(step);
-        } catch (ignore) { state.raf = 0; }
-    };
-    state.raf = requestAnimationFrame(step);
+    kdQueueScrollInertia(state, delta, 'monaco');
+    kdStartMonacoSmoothAnimation(state);
     return true;
 }
 function kdIsExcludedSmoothTarget(target) {
@@ -7445,16 +7617,10 @@ function kdSmoothWheelHandler(e) {
     e.preventDefault();
     var state = kdGetSmoothScrollState(el);
     var max = Math.max(0, el.scrollHeight - el.clientHeight);
-    state.target = Math.max(0, Math.min(max, state.target + delta * 0.78));
-    if (state.raf) return;
-    var step = function() {
-        if (!state.el || !state.el.isConnected) { state.raf = 0; return; }
-        var current = state.el.scrollTop, diff = state.target - current;
-        if (Math.abs(diff) < 0.6) { state.el.scrollTop = state.target; state.raf = 0; return; }
-        state.el.scrollTop = current + diff * 0.14;
-        state.raf = requestAnimationFrame(step);
-    };
-    state.raf = requestAnimationFrame(step);
+    var currentTarget = state.raf ? state.target : el.scrollTop;
+    state.target = Math.max(0, Math.min(max, currentTarget + delta * 0.78));
+    kdQueueScrollInertia(state, delta, 'element');
+    kdStartElementSmoothAnimation(state);
 }
 function kdApplySmoothScroll() {
     var enabled = !!kdSettings.smoothScrollEnabled;
@@ -7466,9 +7632,12 @@ function kdApplySmoothScroll() {
     } else if (!enabled && kdSmoothScrollListenerOn) {
         document.removeEventListener('wheel', kdSmoothWheelHandler, true);
         kdSmoothScrollListenerOn = false;
-        kdSmoothScrollStates.forEach(function(state) { if (state.raf) cancelAnimationFrame(state.raf); });
+        kdSmoothScrollStates.forEach(function(state) { if (state.raf) cancelAnimationFrame(state.raf); if (state.inertiaTimer) clearTimeout(state.inertiaTimer); state.inertiaTimer = 0; state.inertiaVelocity = 0; });
         kdSmoothScrollStates = [];
-        kdSmoothMonacoStates.forEach(function(state) { if (state.raf) cancelAnimationFrame(state.raf); try { if (state.editor) state.target = state.editor.getScrollTop(); } catch (ignore) {} state.raf = 0; });
+        kdSmoothMonacoStates.forEach(function(state) { if (state.raf) cancelAnimationFrame(state.raf); if (state.inertiaTimer) clearTimeout(state.inertiaTimer); try { if (state.editor) state.target = state.editor.getScrollTop(); } catch (ignore) {} state.inertiaTimer = 0; state.inertiaVelocity = 0; state.raf = 0; });
+    } else if (enabled && !kdSettings.inertialScrollEnabled) {
+        kdSmoothScrollStates.forEach(function(state) { if (state.inertiaTimer) clearTimeout(state.inertiaTimer); state.inertiaTimer = 0; state.inertiaVelocity = 0; });
+        kdSmoothMonacoStates.forEach(function(state) { if (state.inertiaTimer) clearTimeout(state.inertiaTimer); state.inertiaTimer = 0; state.inertiaVelocity = 0; });
     }
 }
 
